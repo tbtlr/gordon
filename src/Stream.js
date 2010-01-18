@@ -10,7 +10,7 @@ Gordon.require("src/inflate");
 (function(){
 	var _g = Gordon;
 	var _t2p = _g.twips2px;
-
+	
 	_g.Stream = function(url){
 		var xhr = Gordon.xhr("GET", url, false);
 		xhr.overrideMimeType("text/plain; charset=x-user-defined");
@@ -49,8 +49,8 @@ Gordon.require("src/inflate");
 		
 		readSNumber: function(numBytes){
 			var value = this.readNumber(numBytes);
-			var mask = 0x01 << (numBytes * 8 - 1);
-			if(value & mask){ value = (~value + 1) * -1; }
+			var numBits = numBytes * 8;
+			if(value >> (numBits - 1)){ value -= Math.pow(2, numBits); }
 			return value;
 		},
 		
@@ -171,8 +171,7 @@ Gordon.require("src/inflate");
 		
 		readSB: function(numBits){
 			var value = this.readUB(numBits);
-			var mask = 0x01 << (numBits - 1);
-			if(value & mask){ value -= Math.pow(2, numBits); }
+			if(value >> (numBits - 1)){ value -= Math.pow(2, numBits); }
 			return value;
 		},
 		

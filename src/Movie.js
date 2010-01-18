@@ -176,16 +176,7 @@ Gordon.require("src/Stream");
 						}
 						x2 = Math.round(x2 * 100) / 100;
 						y2 = Math.round(y2 * 100) / 100;
-						segment.push({
-							i: i++,
-							f: isFirst,
-							x1: x1,
-							y1: y1,
-							cx: cx,
-							cy: cy,
-							x2: x2,
-							y2: y2
-						});
+						segment.push({i: i++, f: isFirst, x1: x1, y1: y1, cx: cx, cy: cy, x2: x2, y2: y2});
 						isFirst = false;
 					}else{
 						isFirst = true;
@@ -462,7 +453,8 @@ Gordon.require("src/Stream");
 			if(!d[id]){
 				var button = d[id] = {
 					type: "button",
-					id: id
+					id: id,
+					cxform: new Gordon.Cxform({multR: 0.5, multG: 0.5, multB: 0.5})
 				};
 				var states = button.states = {};
 				do{
@@ -715,6 +707,25 @@ Gordon.require("src/Stream");
 			return t;
 		},
 		
+		_handleDefineShape2: function(){
+			this._handleDefineShape.apply(this, arguments);
+			return this;
+		},
+		
+		_handleDefineButtonCxform: function(offset, length){
+			var s = this.stream;
+			var buttonId = s.readUI16();
+			var button = this._dictionary[buttonId];
+			if(!button.cxform){ button.cxform = new Gordon.Cxform(s.readCxform()); }
+			else{ s.seek(length - 2); }
+			return this;
+		},
+		
+		_handleProtect: function(offset, length){
+			this.stream.seek(length);
+			return this;
+		},
+		
 		prevFrame: function(){
 			this.goto(this.currentFrame - 1);
 			return this;
@@ -748,15 +759,8 @@ Gordon.require("src/Stream");
 	};
 	
 	function _cloneEdge(edge){
-		return {
-			i: edge.i,
-			f: edge.f,
-			x1: edge.x1,
-			y1: edge.y1,
-			cx: edge.cx,
-			cy: edge.cy,
-			x2: edge.x2,
-			y2: edge.y2
+		with(edge){
+			return {i: i, f: f, x1: x1, y1: y1, cx: cx, cy: cy, x2: x2, y2: y2};
 		}
 	}
 	

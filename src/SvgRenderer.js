@@ -151,7 +151,11 @@
 						var states = object.states;
 						for(var state in states){
 							var list = states[state];
-							for(var depth in list){ t.defineCharacter(list[depth]); }
+							for(var depth in list){
+								var entry = _cloneCharacter(list[depth]);
+								entry.cxform = object.cxform;
+								t.defineCharacter(entry);
+							}
 						}
 						break;
 					case "text":
@@ -445,4 +449,15 @@
 			return t;
 		}
 	};
+	
+	var _cloneCharacter = function(character){
+		with(character){
+			return {
+				object: object,
+				depth: depth,
+				matrix: matrix,
+				cxform: character.cxform
+			};
+		}
+	}
 })();
