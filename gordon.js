@@ -25,7 +25,7 @@
 	_g.require = function(url){
 		if(!url.match(/\.([^\/]*)$/)){ url += ".js"; }
 		if(!_loadedUrls[url]){
-			with(_g.xhr("GET", _g.ROOT + url + '?' + Math.random(), false)){
+			with(_g.xhr("GET", _g.ROOT + url, false)){
 				send(null);
 				if(status == 200){
 					eval(responseText);
