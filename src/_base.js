@@ -21,16 +21,16 @@
 		NO_ORDER: "noorder",
 		EXACT_FIT: "exactfit"
 	};
-	_g.signatures = {
+	_g.validSignatures = {
 		SWF: "FWS",
 		COMPRESSED_SWF: "CWS" 
-	}
+	};
 	_g.movieStates = {
 		LOADING: 0,
 		LOADED: 1,
 		PLAYING: 2,
 		STOPPED: 3
-	},
+	};
 	_g.tagCodes = {
 		END: 0,
 		SHOW_FRAME: 1,
@@ -98,11 +98,11 @@
 		DEFINE_FONT4: 91
 	};
 	_g.tagNames = {};
-	_g.tagHandlerMap = {};
+	_g.tagHandlers = {};
 	for(var name in _g.tagCodes){
 		var code = _g.tagCodes[name];
 		_g.tagNames[code] = name;
-		_g.tagHandlerMap[code] = "_handle" + name.toLowerCase().replace(/(^|_)([a-z])/g, function(match, p1, p2){
+		_g.tagHandlers[code] = "handle" + name.toLowerCase().replace(/(^|_)([a-z])/g, function(match, p1, p2){
 			return p2.toUpperCase();
 		});
 	}
@@ -138,6 +138,11 @@
 		DOWN: 0x04,
 		HIT: 0x08
 	};
+	_g.mouseButtons = {
+		LEFT: 1,
+		RIGHT: 2,
+		MIDDLE: 3
+	};
 	_g.textStyleFlags = {
 		HAS_FONT: 0x08,
 		HAS_COLOR: 0x04,
@@ -163,6 +168,7 @@
 		PARENT: "_parent",
 		TOP: "_top"
 	};
+	_g.USE_NATIVE_JSON = !!self.JSON;
 	_g.PX_IN_TWIPS = 20;
 	
 	_g.twips2px = function(twips){

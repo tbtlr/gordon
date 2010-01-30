@@ -11,13 +11,9 @@ Gordon.require("src/inflate");
 	var _g = Gordon;
 	var _t2p = _g.twips2px;
 	
-	_g.Stream = function(url){
-		var xhr = Gordon.xhr("GET", url, false);
-		xhr.overrideMimeType("text/plain; charset=x-user-defined");
-		xhr.send(null);
-		if(xhr.status != 200){ throw new Error("Unable to load " + url + " status: " + xhr.status); }
+	_g.Stream = function(data){
 		var t = this;
-		t._buffer = xhr.responseText;
+		t._buffer = data;
 		t._length = t._buffer.length;
 		t._offset = 0;
 		t._bitBuffer = null;
@@ -38,17 +34,24 @@ Gordon.require("src/inflate");
 			return this._buffer.charCodeAt(position) & 0xff;
 		},
 		
-		readNumber: function(numBytes){
+		readNumber: function(numBytes, bigEndian){
+			var t = this;
 			var value = 0;
-			var p = this._offset;
-			var i = p + numBytes;
-			while(i > p){ value = value * 256 + this.readByteAt(--i); }
-			this._offset += numBytes;
+			if(bigEndian){
+				var i = numBytes;
+				while(i--){ value = value * 256 + t.readByteAt(t._offset++); }
+			}else{
+				var o = t._offset;
+				var i = o + numBytes;
+				while(i > o){ value = value * 256 + t.readByteAt(--i); }
+				t._offset += numBytes;
+			}
+			t.align();
 			return value;
 		},
 		
-		readSNumber: function(numBytes){
-			var value = this.readNumber(numBytes);
+		readSNumber: function(numBytes, bigEndian){
+			var value = this.readNumber(numBytes, bigEndian);
 			var numBits = numBytes * 8;
 			if(value >> (numBits - 1)){ value -= Math.pow(2, numBits); }
 			return value;
@@ -58,54 +61,44 @@ Gordon.require("src/inflate");
 			return this.readSNumber(1);
 		},
 		
-		readSI16: function(){
-			return this.readSNumber(2);
+		readSI16: function(bigEndian){
+			return this.readSNumber(2, bigEndian);
 		},
 		
-		readSI32: function(){
-			return this.readSNumber(4);
+		readSI32: function(bigEndian){
+			return this.readSNumber(4, bigEndian);
 		},
 		
 		readUI8: function(){
-			return this.readNumber(1);
+			return this.readByteAt(this._offset++);
 		},
 		
-		readUI16: function(){
-			return this.readNumber(2);
+		readUI16: function(bigEndian){
+			return this.readNumber(2, bigEndian);
 		},
 		
-		readUI24: function(){
-			return this.readNumber(3);
+		readUI24: function(bigEndian){
+			return this.readNumber(3, bigEndian);
 		},
 		  
-		readUI32: function(){
-			return this.readNumber(4);
+		readUI32: function(bigEndian){
+			return this.readNumber(4, bigEndian);
 		},
 		
 		readFixed: function(){
 			return this._readFixedPoint(32, 16);
 		},
 		
+		_readFixedPoint: function(numBits, precision){
+			return this.readSB(numBits) * Math.pow(2, -precision);
+		},
+		
 		readFixed8: function(){
 			return this._readFixedPoint(16, 8);
 		},
 		
-		_readFixedPoint: function(numBits, precision){
-			var value = this.readSB(numBits);
-			value = value * Math.pow(2, -precision)
-			return value;
-		},
-		
-		readFloat16: function(){
-			return this._readFloatingPoint(5, 10);
-		},
-		
 		readFloat: function(){
 			return this._readFloatingPoint(8, 23);
-		},
-		
-		readDouble: function(){
-			return this._readFloatingPoint(11, 52);
 		},
 		
 		_readFloatingPoint: function(numEbits, numSbits){
@@ -114,13 +107,11 @@ Gordon.require("src/inflate");
 			var t = this;
 			if(numBytes > 4){
 				var value = 0;
-				var numWords = Math.ceil(numBytes / 4);
-				var i = numWords;
+				var i = Math.ceil(numBytes / 4);
 				while(i--){
-					var p = t._offset;
-					var offset = numBytes >= 4 ? 4 : numBytes % 4;
-					var j = p + offset;
-					while(j > p){ value = value * 256 + String.fromCharCode(t.readByteAt(--j)); }
+					var o = t._offset;
+					var j = o + numBytes >= 4 ? 4 : numBytes % 4;
+					while(j > o){ value = value * 256 + String.fromCharCode(t.readByteAt(--j)); }
 					t._offset += numBytes;
 					numBytes -= numBytes;
 				}
@@ -144,26 +135,34 @@ Gordon.require("src/inflate");
 				var expo = t.readUB(numEbits);
 				var mantissa = t.readUB(numSbits);
 			}
-			var value = 0;
 			var maxExpo = Math.pow(2, numEbits);
 			var bias = Math.floor((maxExpo - 1) / 2);
 			var scale = Math.pow(2, numSbits);
 			var fraction = mantissa / scale;
 			if(bias){
-				if(bias < maxExpo){ value = Math.pow(2, expo - bias) * (1 + faction); }
-				else if(fraction){ value = NaN; }
-				else{ value = Infinity; }
-			}else if(fraction){ value = Math.pow(2, 1 - bias) * fraction; }
+				if(bias < maxExpo){ var value = Math.pow(2, expo - bias) * (1 + faction); }
+				else if(fraction){ var value = NaN; }
+				else{ var value = Infinity; }
+			}else if(fraction){ var value = Math.pow(2, 1 - bias) * fraction; }
+			else{ var value = 0; }
 			if(value != NaN && sign){ value *= -1; }
 			return value;
+		},
+		
+		readFloat16: function(){
+			return this._readFloatingPoint(5, 10);
+		},
+		
+		readDouble: function(){
+			return this._readFloatingPoint(11, 52);
 		},
 		
 		readEncodedU32: function(){
 			var value = 0;
 			var i = 5;
 			while(i--){
-				var number = this.readNumber();
-				value = value * 128 + number & 0x7F;
+				var number = this.readByteAt(this._offset++);
+				value = value * 128 + (number & 0x7F);
 				if(!(number & 0x80)){ break; }
 			}
 			return value;
@@ -176,16 +175,15 @@ Gordon.require("src/inflate");
 		},
 		
 		readUB: function(numBits){
-			var value = 0;
 			var t = this;
+			var value = 0;
 			var i = numBits;
 			while(i--){
-				if(t._bitOffset == 8){
+				if(8 == t._bitOffset){
 					t._bitBuffer = t.readUI8();
 					t._bitOffset = 0;
 		    	}
-		    	var mask = 0x80 >> t._bitOffset;
-				value = value * 2 + (t._bitBuffer & mask ? 1 : 0);
+				value = value * 2 + (t._bitBuffer & (0x80 >> t._bitOffset) ? 1 : 0);
 				t._bitOffset++;
 			}
 			return value;
@@ -196,14 +194,23 @@ Gordon.require("src/inflate");
 		},
 		
 		readString: function(numChars){
-			var chars = [];
-			var i = numChars || this._length - this._offset;
-			while(i--){
-				var code = this.readNumber(1);
-				if(numChars || code){ chars.push(String.fromCharCode(code)); }
-				else{ break; }
+			var t = this;
+			var b = t._buffer;
+			if(numChars){
+				var string = b.substr(t._offset, numChars);
+				t._offset += numChars;
+			}else{
+				numChars = t._length - t._offset;
+				var chars = [];
+				var i = numChars;
+				while(i--){
+					var code = t.readByteAt(t._offset++);
+					if(code){ chars.push(String.fromCharCode(code)); }
+					else{ break; }
+				}
+				var string = chars.join('');
 			}
-			return chars.join('');
+			return string;
 		},
 		
 		readBool: function(numBits){
@@ -235,54 +242,40 @@ Gordon.require("src/inflate");
 			return rgba;
 		},
 		
-		align: function(){
-			this._bitBuffer = null;
-			this._bitOffset = 8;
-			return this;
-		},
-		
 		readRect: function(){
-			var rect = {
-				top: 0,
-				right: 0,
-				bottom: 0,
-				left: 0
-			};
 			var t = this;
 			var numBits = t.readUB(5);
-			rect.left = _t2p(t.readSB(numBits));
-			rect.right = _t2p(t.readSB(numBits));
-			rect.top = _t2p(t.readSB(numBits));
-			rect.bottom = _t2p(t.readSB(numBits));
+			var rect = {
+				left: _t2p(t.readSB(numBits)),
+				right: _t2p(t.readSB(numBits)),
+				top: _t2p(t.readSB(numBits)),
+				bottom: _t2p(t.readSB(numBits))
+			}
 			t.align();
 			return rect;
 		},
 		
 		readMatrix: function(){
-			var matrix = {
-				scaleX: 1.0,
-				scaleY: 1.0,
-				skewX: 0.0,
-				skewY: 0.0,
-				moveX: 0,
-				moveY: 0
-			};
 			var t = this;
 			var hasScale = t.readBool();
 			if(hasScale){
 				var numBits = t.readUB(5);
-				matrix.scaleX = t.readFB(numBits);
-				matrix.scaleY = t.readFB(numBits);
-			}
+				var scaleX = t.readFB(numBits);
+				var scaleY = t.readFB(numBits);
+			}else{ var scaleX = scaleY = 1.0; }
 			var hasRotation = t.readBool();
 			if(hasRotation){
 				var numBits = t.readUB(5);
-				matrix.skewX = t.readFB(numBits);
-				matrix.skewY = t.readFB(numBits);
-			}
+				var skewX = t.readFB(numBits);
+				var skewY = t.readFB(numBits);
+			}else{ var skewX =  skewY = 0.0; }
 			var numBits = t.readUB(5);
-			matrix.moveX = _t2p(t.readSB(numBits));
-			matrix.moveY = _t2p(t.readSB(numBits));
+			var matrix = {
+				scaleX: scaleX, scaleY: scaleY,
+				skewX: skewX, skewY: skewY,
+				moveX: _t2p(t.readSB(numBits)),
+				moveY: _t2p(t.readSB(numBits))
+			};
 			t.align();
 			return matrix;
 		},
@@ -296,32 +289,26 @@ Gordon.require("src/inflate");
 		},
 		
 		_readCxform: function(withAlpha){
-			var cxform = {
-				multR: 1.0,
-				multG: 1.0,
-				multB: 1.0,
-				multA: 1.0,
-				addR: 0.0,
-				addG: 0.0,
-				addB: 0.0,
-				addA: 0.0
-			};
 			var t = this;
 			var hasAddTerms = t.readBool();
 			var hasMultTerms = t.readBool();
 			var numBits = t.readUB(4);
 		    if(hasMultTerms){
-				cxform.multR = t.readSB(numBits) / 256;
-				cxform.multG = t.readSB(numBits) / 256;
-				cxform.multB = t.readSB(numBits) / 256;
-				if(withAlpha){ cxform.multA = t.readSB(numBits) / 256; }
-		    }
+				var multR = t.readSB(numBits) / 256;
+				var multG = t.readSB(numBits) / 256;
+				var multB = t.readSB(numBits) / 256;
+				var multA = withAlpha ? t.readSB(numBits) / 256 : 1;
+		    }else{ var multR = multG = multB = multA = 1; }
 		    if(hasAddTerms){
-				cxform.addR = t.readSB(numBits);
-				cxform.addG = t.readSB(numBits);
-				cxform.addB = t.readSB(numBits);
-				if(withAlpha){ cxform.addA = t.readSB(numBits); }
-		    }
+				var addR = t.readSB(numBits);
+				var addG = t.readSB(numBits);
+				var addB = t.readSB(numBits);
+				var addA = withAlpha ? t.readSB(numBits) : 0;
+		    }else{ var addR = addG = addB = addA = 0; }
+			var cxForm = {
+				multR: multR, multG: multG, multB: multB, multA: multA,
+				addR: addR, addG: addG, addB: addB, addA: addA
+			}
 		    t.align();
 			return cxform;
 		},
@@ -338,6 +325,12 @@ Gordon.require("src/inflate");
 		reset: function(){
 			this._offset = 0;
 			this.align();
+			return this;
+		},
+		
+		align: function(){
+			this._bitBuffer = null;
+			this._bitOffset = 8;
 			return this;
 		}
 	};

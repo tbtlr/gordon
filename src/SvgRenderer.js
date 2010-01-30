@@ -6,18 +6,12 @@
  */
 
 (function(){
-	var NAMESPACE_SVG = "http://www.w3.org/2000/svg";
-	var NAMESPACE_XLINK = "http://www.w3.org/1999/xlink";
+	var NS_SVG = "http://www.w3.org/2000/svg";
+	var NS_XLINK = "http://www.w3.org/1999/xlink";
 	
 	var _g = Gordon;
+	var _d = document;
 	var _buttonMask = 0;
-	
-	document.addEventListener("mousedown", function(event){
-		_buttonMask |= 0x01 << event.button;
-	}, true);
-	document.addEventListener("mouseup", function(event){
-		_buttonMask ^= 0x01 << event.button;
-	}, true);
 	
 	_g.SvgRenderer = function(width, height, viewWidth, viewHeight, quality, scale, bgcolor){
 		var t = this;
@@ -26,7 +20,7 @@
 		t.viewWidth = viewWidth;
 		t.viewHeight = viewHeight;
 		t.quality = null;
-		t.scale = _g.scaleValues.DEFAULT;
+		t.scale = scale || _g.scaleValues.DEFAULT;
 		t.bgcolor = null;
 		t._dictionary = {};
 		t._displayList = {};
@@ -38,25 +32,25 @@
 		};
 		if(viewWidth && viewHeight && (width != viewWidth || height != viewHeight)){
 			var viewBox = [0, 0, viewWidth, viewHeight];
-			attributes.viewBox = viewBox.join(' ');
+			attributes.viewBox = viewBox.toString();
 			if(scale == _g.scaleValues.EXACT_FIT){ attributes.preserveAspectRatio = "none"; }
 		}
 		t._setAttributes(n, attributes);
 		t._defs = n.appendChild(t._createElement("defs"));
 		t._screen = n.appendChild(t._createElement('g'));
-		t._currentFillId = t._currentFilterId = 0;
+		t._currentDefId = 0;
 		t._setQuality(quality || _g.qualityValues.HIGH);
 		if(bgcolor){ t.setBgcolor(bgcolor); }
 	};
 	_g.SvgRenderer.prototype = {
 		_createElement: function(name){
-			return document.createElementNS(NAMESPACE_SVG, name);
+			return _d.createElementNS(NS_SVG, name);
 		},
 		
 		_setAttributes: function(node, attributes, namespace){
 			for(var name in attributes){
 				var value = attributes[name];
-				name = name.replace(/_/, '-');
+				name = name == "className" ? "class" : name.replace(/_/g, '-');
 				if(namespace){ node.setAttributeNS(namespace, name, value); }
 				else{ node.setAttribute(name, value); }
 			}
@@ -69,47 +63,47 @@
 			switch(quality){
 				case q.LOW:
 					var attributes = {
-						color_rendering: "optimizeSpeed",
 						shape_rendering: "crispEdges",
+						image_rendering: "optimizeSpeed",
 						text_rendering: "optimizeSpeed",
-						image_rendering: "optimizeSpeed"
+						color_rendering: "optimizeSpeed"
 					}
 					break;
 				case q.AUTO_LOW:
 				case q.AUTO_HIGH:
 					var attributes = {
-						color_rendering: "auto",
 						shape_rendering: "auto",
+						image_rendering: "auto",
 						text_rendering: "auto",
-						image_rendering: "auto"
+						color_rendering: "auto"
 					}
 					break;
 				case q.MEDIUM:
 					var attributes = {
-						color_rendering: "optimizeSpeed",
 						shape_rendering: "optimizeSpeed",
+						image_rendering: "optimizeSpeed",
 						text_rendering: "optimizeLegibility",
-						image_rendering: "optimizeSpeed"
+						color_rendering: "optimizeSpeed"
 					}
 					break;
 				case q.HIGH:
 					var attributes = {
-						color_rendering: "optimizeQuality",
 						shape_rendering: "geometricPrecision",
+						image_rendering: "auto",
 						text_rendering: "geometricPrecision",
-						image_rendering: "auto"
+						color_rendering: "optimizeQuality"
 					}
 					break;
 				case q.BEST:
 					var attributes = {
-						color_rendering: "optimizeQuality",
 						shape_rendering: "geometricPrecision",
+						image_rendering: "optimizeQuality",
 						text_rendering: "geometricPrecision",
-						image_rendering: "optimizeQuality"
+						color_rendering: "optimizeQuality"
 					}
 					break;
 			}
-			t._setAttributes(this._screen, attributes);
+			t._setAttributes(t._screen, attributes);
 			t.quality = quality;
 			return t;
 		},
@@ -121,57 +115,120 @@
 		setBgcolor: function(rgb){
 			var t = this;
 			if(!t.bgcolor){
-				var color = new Gordon.Color(rgb);
-				t._node.style.background = color.toString();
-				t.bgcolor = color;
+				t._node.style.background = _color2string(rgb);
+				t.bgcolor = rgb;
 			}
 			return t;
 		},
 		
-		defineCharacter: function(character){
-			var object = character.object;
-			var id = object.id;
+		defineObject: function(object){
+			var type = object.type;
 			var t = this;
-			var d = t._dictionary;
-			if(!d[id]){
-				var type = object.type;
-				switch(type){
-					case "shape":
-						var segments = object.segments;
-						if(segments){
-							var node = t._createElement('g');
-							for(var i = 0; segments[i]; i++){
-								var segment = segments[i];
-								node.appendChild(t._buildShape(segments[i]));
-							}
-						}else{ var node = t._buildShape(object); }
-						t._setAttributes(t._defs.appendChild(node), {id: "shape" + id});
-						break;
-					case "button":
-						var states = object.states;
-						for(var state in states){
-							var list = states[state];
-							for(var depth in list){
-								var entry = _cloneCharacter(list[depth]);
-								entry.cxform = object.cxform;
-								t.defineCharacter(entry);
-							}
+			var node = null;
+			var id = object.id;
+			var attributes = {id: type + id};
+			switch(type){
+				case "shape":
+					var segments = object.segments;
+					if(segments){
+						var node = t._createElement('g');
+						segments.forEach(function(segment){
+							node.appendChild(t._buildShape(segment));
+						});
+					}else{ var node = t._buildShape(object); }
+					break;
+				case "image":
+					var node = t._createElement("image");
+					t._setAttributes(node, {href: object.uri}, NS_XLINK);
+					attributes.width = object.width;
+					attributes.height = object.height;
+					break;
+				case "button":
+					var node = t._createElement('g');
+					var activeArea = t._createElement('g');
+					var states = object.states;
+					var b = _g.buttonStates;
+					for(var s in states){
+						var display = s == b.HIT ? activeArea : node.appendChild(t._createElement('g'));
+						t._setAttributes(display, {
+							className: "state" + s,
+							opacity: s == b.UP ? 1 : 0
+						});
+						var filter = object.filter;
+						var list = states[s];
+						for(var depth in list){
+							if(filter){
+								var character = _cloneCharacter(list[depth]);
+								character.filter = filter;
+							}else{ var character = list[depth]; }
+							display.appendChild(t._buildCharacter(character));
 						}
-						break;
-					case "text":
-						t._setAttributes(t._defs.appendChild(t._buildText(object)), {id: "text" + id});
-						break;
-				}
-				d[id] = object;
-			}
-			var cxform = character.cxform;
-			if(cxform){
-				with(t._defs.appendChild(t._createElement("filter"))){
-					t._setAttributes(appendChild(t._createElement("feColorMatrix")), {
-						type: "matrix",
-						values: cxform.toString(),
-						id: "cxform" + (++t._currentFilterId)
+					}
+					node.appendChild(activeArea);
+					break;
+				case "font":
+					var info = object.info;
+					if(info){
+						var node = t._createElement("font");
+						var faceNode = node.appendChild(t._createElement("font-face"));
+						t._setAttributes(faceNode, {font_family: info.name});
+						var glyphs = object.glyphs;
+						var codes = info.codes;
+						glyphs.forEach(function(glyph, i){
+							var glyphNode = node.appendChild(t._createElement("glyph"));
+							t._setAttributes(glyphNode, {
+								unicode: String.fromCharCode(codes[i]),
+								d: glyph.commands.join(' ')
+							});
+						});
+					}
+					break;
+				case "text":
+					var node = t._createElement('g');
+					var strings = object.strings;
+					strings.forEach(function(string){
+						var textNode = node.appendChild(t._createElement("text"));
+						var entries = string.entries;
+						var advances = [];
+						var font = t._dictionary[string.font].object;
+						var info = font.info;
+						var codes = info.codes
+						var characters = [];
+						var x = string.x;
+						entries.forEach(function(entry){
+							advances.push(x);
+							characters.push(String.fromCharCode(codes[entry.index]));
+							x += entry.advance;
+						});
+						t._setAttributes(textNode, {
+							font_family: info.name,
+							font_size: string.size,
+							fill: _color2string(string.fill),
+							x: advances.join(' '),
+							y: string.y
+						});
+						textNode.appendChild(_d.createTextNode(characters.join('')));
 					});
+					attributes.transform = _matrix2string(object.matrix);
+					break;
+				case "filter":
+					var node = t._createElement("filter");
+					var cxform = object.cxform;
+					if(cxform){
+						var feNode = node.appendChild(t._createElement("feColorMatrix"));
+						t._setAttributes(feNode, {
+							type: "matrix",
+							values: _cxform2string(cxform)
+						});
+					}
+					break;
+			}
+			if(node){
+				t._setAttributes(node, attributes);
+				t._defs.appendChild(node);
+				t._dictionary[id] = {
+					object: object,
+					node: node
 				}
 			}
 			return t;
@@ -186,31 +243,30 @@
 			if(fill){
 				if(fill.type){
 					t._defineFill(fill);
-					attributes.fill = "url(#" + fill.type + t._currentFillId + ')';
-				}else{ attributes.fill = fill.toString(); }
+					attributes.fill = "url(#" + fill.type + t._currentDefId + ')';
+				}else{ attributes.fill = _color2string(fill); }
 				attributes.fill_rule = "evenodd";
 			}else{ attributes.fill = "none"; }
 			if(stroke){
-				attributes.stroke = stroke.color.toString();
+				attributes.stroke = _color2string(stroke.color);
 				attributes.stroke_width = Math.max(stroke.width, 1);
-				attributes.stroke_linecap = "round";
-				attributes.stroke_linejoin = "round";
+				attributes.stroke_linecap = attributes.stroke_linejoin = "round";
 			}
 			t._setAttributes(node, attributes);
 			return node;
 		},
 		
 		_defineFill: function(fill){
-			var t = this;
 			var type = fill.type;
-			var attributes = {id: type + (++t._currentFillId)};
+			var t = this;
+			var attributes = {id: type + (++t._currentDefId)};
 			switch(type){
 				case "linear":
 				case "radial":
 					var node = t._createElement(type + "Gradient");
 					attributes.gradientUnits = "userSpaceOnUse";
-					attributes.gradientTransform = fill.matrix.toString();
-					if(type == "linear"){ 
+					attributes.gradientTransform = _matrix2string(fill.matrix);
+					if("linear" == type){ 
 						attributes.x1 = -819.2;
 						attributes.x2 = 819.2;
 					}else{
@@ -229,209 +285,145 @@
 					var i = _g.interpolationModes;
 					if(fill.interpolation == i.LINEAR_RGB){ attributes.color_interpolation = "linearRGB"; }
 					var stops = fill.stops;
-					for(var i = 0; stops[i]; i++){
-						var stop = stops[i];
-						t._setAttributes(node.appendChild(t._createElement("stop")), {
+					stops.forEach(function(stop){
+						var stopNode = node.appendChild(t._createElement("stop"));
+						t._setAttributes(stopNode, {
 							offset: stop.offset,
-							stop_color: stop.color.toString()
+							stop_color: _color2string(stop.color)
 						});
-					}
+					});
 					break;
 				case "pattern":
 					var node = t._createElement("pattern");
+					var useNode = node.appendChild(t._createElement("use"));
 					var img = fill.image;
-					var imgNode = node.appendChild(t._createElement("image"));
-					var attributes = {
-						width: img.width,
-						height: img.height
-					};
-					t._setAttributes(imgNode, {href: img.data}, NAMESPACE_XLINK);
-					t._setAttributes(imgNode, attributes);
+					t._setAttributes(useNode, {href: "#image" + img.id}, NS_XLINK);
 					attributes.patternUnits = "userSpaceOnUse";
-					attributes.patternTransform = fill.matrix.toString();
-					
+					attributes.patternTransform = _matrix2string(fill.matrix);
+					attributes.width = img.width;
+					attributes.height = img.height;
+					break;
 			}
-			t._setAttributes(t._defs.appendChild(node), attributes);
-			return t;
-		},
-		
-		_buildText: function(text){
-			var t = this;
-			var node = t._createElement('g');
-			t._setAttributes(node, {transform: text.matrix.toString()});
-			var strings = text.strings;
-			for(var i = 0; strings[i]; i++){
-				var string = strings[i];
-				var font = string.font;
-				t._defineFont(font);
-				var entries = string.entries;
-				var advances = [];
-				var info = font.info;
-				var codes = info.codes
-				var characters = [];
-				var x = string.x;
-				for(var j = 0; entries[j]; j++){
-					var entry = entries[j];
-					advances.push(x);
-					characters.push(String.fromCharCode(codes[entry.index]));
-					x += entry.advance;
-				}
-				var textNode = node.appendChild(t._createElement("text"));
-				t._setAttributes(textNode, {
-					font_family: info.name,
-					font_size: string.size,
-					fill: string.fill.toString(),
-					x: advances.join(' '),
-					y: string.y
-				});
-				textNode.appendChild(document.createTextNode(characters.join('')));
-			}
-			return node;
-		},
-		
-		_defineFont: function(font){
-			var id = font.id;
-			var t = this;
-			var d = t._dictionary;
-			if(!d[id]){
-				var node = t._defs.appendChild(t._createElement("font-face"));
-				var info = font.info;
-				var glyphs = font.glyphs;
-				var codes = info.codes;
-				t._setAttributes(node, {
-					font_family: info.name,
-					units_per_em: 1024
-				});
-				for(var i = 0; glyphs[i]; i++){t._setAttributes(t._createElement("glyph"), {
-					unicode: String.fromCharCode(codes[i]),
-					d: glyphs[i].commands.join(' ')
-				}); }
-				d[id] = font;
-			}
+			t._setAttributes(node, attributes);
+			t._defs.appendChild(node);
 			return t;
 		},
 		
 		placeCharacter: function(character){
+			var depth = character.depth;
 			var t = this;
 			var d = t._displayList;
-			var s = t._screen;
-			var node = t._buildCharacter(character);
-			var depth = character.depth;
-			if(depth == 1){ s.insertBefore(node, s.firstChild); }
-			else{
-				var nextDepth = 0;
-				for(var entry in d){
-					if(entry > depth){
-						nextDepth = entry;
-						break;
+			var replace = d[depth];
+			if(!replace || replace.character !== character){
+				var node = t._buildCharacter(character);
+				var s = t._screen;
+				if(replace && replace !== character){ t.removeCharacter(depth); }
+				if(1 == depth){ s.insertBefore(node, s.firstChild); }
+				else{
+					var nextDepth = 0;
+					for(var entry in d){
+						if(entry > depth){
+							nextDepth = entry;
+							break;
+						}
 					}
+					if(nextDepth){ s.insertBefore(node, d[nextDepth].node); }
+					else{ s.appendChild(node); }
 				}
-				if(nextDepth){ s.insertBefore(node, d[nextDepth]); }
-				else{ s.appendChild(node); }
+				d[depth] = {
+					character: character,
+					node: node
+				};
 			}
-			d[depth] = node;
 			return t;
 		},
 		
 		_buildCharacter: function(character){
-			var object = character.object;
-			var type = object.type;
 			var t = this;
-			var id = object.id;
+			var d = t._dictionary;
+			var object = d[character.object].object;
+			var type = object.type;
 			switch(type){
 				case "button":
-					var node = t._buildButton(object);
+					var node = d[character.object].node.cloneNode(true);
+					var b = _g.buttonStates;
+					var displayMap = {};
+					for(var i in b){
+						var state = b[i];
+						displayMap[state] = node.getElementsByClassName("state" + state)[0];
+					}
+					var m = _g.mouseButtons;
+					var isMouseOver = false;
+					var mouseupHandle = function(event){
+						if(!(_buttonMask & m.LEFT)){
+							if(isMouseOver){
+								setState(b.OVER);
+								object.action();
+							}else{ setState(b.UP); }
+							_d.removeEventListener("mouseup", mouseupHandle, false);
+							t.eventTarget = null;
+						}
+						return false;
+					};
+					with(displayMap[b.HIT]){
+						onmouseover = function(event){
+							isMouseOver = true;
+							if(!t.eventTarget){
+								if(_buttonMask & m.LEFT){ this.onmousedown(event); }
+								else{ setState(b.OVER); }
+							}
+							return false;
+						};
+						onmouseout = function(event){
+							isMouseOver = false;
+							if(!t.eventTarget){ setState(this == t.eventTarget ? b.OVER : b.UP); }
+							return false;
+						};
+						onmousedown = function(event){
+							if(_buttonMask & m.LEFT){
+								setState(b.DOWN);
+								_d.addEventListener("mouseup", mouseupHandle, false);
+								t.eventTarget = this;
+							}
+							return false;
+						};
+						onmouseup = function(event){
+							setState(b.OVER);
+							return false;
+						};
+					}
+					var currentState = b.UP;
+					var setState = function(state){
+						t._setAttributes(displayMap[currentState], {opacity: 0});
+						t._setAttributes(displayMap[state], {opacity: 1});
+						currentState = state;
+					};
 					break;
 				default:
 					var node = t._createElement("use");
-					t._setAttributes(node, {href: "#" + type + id}, NAMESPACE_XLINK);
+					t._setAttributes(node, {href: "#" + type + object.id}, NS_XLINK);
 			}
-			var attributes = {transform: character.matrix.toString()};
-			if(character.cxform){ attributes.filter = "url(#cxform" + (++t._currentFilterId) + ')'; }
-			t._setAttributes(node, attributes);
+			var filter = character.filter;
+			if(filter){ attributes.filter = "url(#filter" + filter.id + ')'; }
+			t._setAttributes(node, {
+				id: "character" + character.id * -1,
+				className: "depth" + character.depth,
+				transform: _matrix2string(character.matrix)
+			});
 			return node;
 		},
 		
-		_buildButton: function(button){
-			var t = this;
-			var node = t._createElement('g');
-			var activeArea = t._createElement('g');
-			var displayMap = {};
-			var b = _g.buttonStates;
-			var currentState = b.UP;
-			var states = button.states;
-			for(var s in states){
-				var display = displayMap[s] = s == b.HIT ? activeArea : node.appendChild(t._createElement('g'));
-				if(s != currentState){ t._setAttributes(display, {opacity: 0}); }
-				var list = states[s];
-				for(var depth in list){ display.appendChild(t._buildCharacter(list[depth])); }
-			}
-			var isMouseOver = false;
-			var mouseupHandle = function(event){
-				if(!(_buttonMask & 0x01)){
-					if(isMouseOver){
-						setState(b.OVER);
-						button.onClick();
-					}else{ setState(b.UP); }
-					document.removeEventListener("mouseup", mouseupHandle, false);
-					t.eventTarget = null;
-				}
-				return false;
-			};
-			with(node.appendChild(activeArea)){
-				onmouseover = function(event){
-					isMouseOver = true;
-					if(!t.eventTarget){
-						if(_buttonMask & 0x01){ this.onmousedown(event); }
-						else{ setState(b.OVER); }
-					}
-					return false;
-				};
-				onmouseout = function(event){
-					isMouseOver = false;
-					if(!t.eventTarget){ setState(t.eventTarget == this ? b.OVER : b.UP); }
-					return false;
-				};
-				onmousedown = function(event){
-					if(_buttonMask & 0x01){
-						setState(b.DOWN);
-						document.addEventListener("mouseup", mouseupHandle, false);
-						t.eventTarget = this;
-					}
-					return false;
-				};
-				onmouseup = function(event){
-					setState(b.OVER);
-					return false;
-				};
-			}
-			var setState = function(state){
-				t._setAttributes(displayMap[currentState], {opacity: 0});
-				t._setAttributes(displayMap[state], {opacity: 1});
-				currentState = state;
-			};
-			return node;
-		},
-		
-		removeCharacter: function(character){
+		removeCharacter: function(depth){
 			var d = this._displayList;
-			var depth = character.depth;
-			this._screen.removeChild(d[depth]);
+			var s = this._screen;
+			s.removeChild(d[depth].node);
 			delete d[depth];
 			return this;
 		},
 		
-		reset: function(){
-			var t = this;
-			var d = t._displayList;
-			for(var depth in d){ t.removeCharacter({depth: depth}); }
-			t._currentFillId = t._currentFilterId = 0;
-			return t;
-		},
-		
 		toggleQuality: function(){
-			var q = _g.qualityValues;
 			var t = this;
+			var q = _g.qualityValues;
 			switch(t.quality){
 				case q.LOW:
 					t._setQuality(q.HIGH);
@@ -450,7 +442,26 @@
 		}
 	};
 	
-	var _cloneCharacter = function(character){
+	function _color2string(color){
+		if("string" == typeof color){ return color.match(/^([0-9a-z]{1,2}){3}$/i) ? color : null; }
+		with(color){
+			return "rgb(" + [r, g, b] + ')';
+		}
+	}
+	
+	function _matrix2string(matrix){
+		with(matrix){
+			return "matrix(" + [scaleX, skewX, skewY, scaleY, moveX, moveY] + ')';
+		}
+	}
+	
+	function _cxform2string(cxform){
+		with(cxform){
+			return [multR, 0, 0, 0, addR, 0, multG, 0, 0, addG, 0, 0, multB, 0, addB, 0, 0, 0, multA, addA].toString();
+		}
+	}
+	
+	function _cloneCharacter(character){
 		with(character){
 			return {
 				object: object,
@@ -460,4 +471,11 @@
 			};
 		}
 	}
+	
+	_d.addEventListener("mousedown", function(event){
+		_buttonMask |= 0x01 << event.button;
+	}, true);
+	_d.addEventListener("mouseup", function(event){
+		_buttonMask ^= 0x01 << event.button;
+	}, true);
 })();
