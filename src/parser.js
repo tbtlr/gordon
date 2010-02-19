@@ -2,12 +2,13 @@
     var useNativeJson = !!global.JSON;
     
     if(doc && global.Worker){
+        var REGEXP_SCRIPT_SRC = /(^|.*\/)gordon.(min\.)?js$/;
+        
         var scripts = doc.getElementsByTagName("script"),
-            regexp = /(^|.*\/)gordon.(min\.)?js$/,
             src = "gordon.min.js",
             i = scripts.length;
         while(i--){
-            var match = regexp.exec(scripts[i].src);
+            var match = REGEXP_SCRIPT_SRC.exec(scripts[i].src);
             if(match){
                 src = match[0];
                 break;

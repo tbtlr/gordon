@@ -433,8 +433,10 @@
         }
     };
     
+    var REGEXP_IS_COLOR = /^([\da-f]{1,2}){3}$/i;
+    
     function color2string(color){
-        if("string" == typeof color){ return /^([0-9a-z]{1,2}){3}$/i.test(color) ? color : null; }
+        if("string" == typeof color){ return REGEXP_IS_COLOR.test(color) ? color : null; }
         with(color){
             return "rgb(" + [red, green, blue] + ')';
         }
