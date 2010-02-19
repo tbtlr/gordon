@@ -1,37 +1,29 @@
-/*
- *    Gordon: An open source Flash™ runtime written in pure JavaScript
- *
- *    Copyright (c) 2010 Tobias Schneider
- *    Gordon is freely distributable under the terms of the MIT license.
- */
-
-(function(){
-	var _g = Gordon;
-	
-	_g.qualityValues = {
+var Gordon = {
+	qualityValues: {
 		LOW: "low",
 		AUTO_LOW: "autolow",
 		AUTO_HIGH: "autohigh",
 		MEDIUM: "medium",
 		HIGH: "high",
 		BEST: "best"
-	};
-	_g.scaleValues = {
-		DEFAULT: "default",
+	},
+	scaleValues: {
+		SHOW_ALL: "showall",
 		NO_ORDER: "noorder",
 		EXACT_FIT: "exactfit"
-	};
-	_g.validSignatures = {
+	},
+	validSignatures: {
 		SWF: "FWS",
 		COMPRESSED_SWF: "CWS" 
-	};
-	_g.movieStates = {
+	},
+	readyStates: {
 		LOADING: 0,
-		LOADED: 1,
-		PLAYING: 2,
-		STOPPED: 3
-	};
-	_g.tagCodes = {
+		UNINITIALIZED: 1,
+		LOADED: 2,
+		INTERACTIVE: 3,
+		COMPLETE: 4
+	},
+	tagCodes: {
 		END: 0,
 		SHOW_FRAME: 1,
 		DEFINE_SHAPE: 2,
@@ -96,17 +88,10 @@
 		START_SOUND2: 89,
 		DEFINE_BITS_JPEG4: 90,
 		DEFINE_FONT4: 91
-	};
-	_g.tagNames = {};
-	_g.tagHandlers = {};
-	for(var name in _g.tagCodes){
-		var code = _g.tagCodes[name];
-		_g.tagNames[code] = name;
-		_g.tagHandlers[code] = "handle" + name.toLowerCase().replace(/(^|_)([a-z])/g, function(match, p1, p2){
-			return p2.toUpperCase();
-		});
-	}
-	_g.fillStyleTypes = {
+	},
+	tagNames: {},
+	tagHandlers: {},
+	fillStyleTypes: {
 		SOLID: 0x00, 
 		LINEAR_GRADIENT: 0x10, 
 		RADIAL_GRADIENT: 0x12,
@@ -115,41 +100,41 @@
 		CLIPPED_BITMAP: 0x41, 
 		NON_SMOOTHED_REPEATING_BITMAP: 0x42,
 		NON_SMOOTHED_CLIPPED_BITMAP: 0x43
-	};
-	_g.spreadModes = {
+	},
+	spreadModes: {
 		PAD: 0,
 		REFLECT: 1,
 		REPEAT: 2
-	};
-	_g.interpolationModes = {
+	},
+	interpolationModes: {
 		RGB: 0,
 		LINEAR_RGB: 1
-	};
-	_g.styleChangeStates = {
+	},
+	styleChangeStates: {
 		MOVE_TO: 0x01,
 		LEFT_FILL_STYLE: 0x02,
 		RIGHT_FILL_STYLE: 0x04,
 		LINE_STYLE: 0x08,
 		NEW_STYLES: 0x10
-	};
-	_g.buttonStates = {
+	},
+	buttonStates: {
 		UP: 0x01,
 		OVER: 0x02,
 		DOWN: 0x04,
 		HIT: 0x08
-	};
-	_g.mouseButtons = {
+	},
+	mouseButtons: {
 		LEFT: 1,
 		RIGHT: 2,
 		MIDDLE: 3
-	};
-	_g.textStyleFlags = {
+	},
+	textStyleFlags: {
 		HAS_FONT: 0x08,
 		HAS_COLOR: 0x04,
 		HAS_XOFFSET: 0x01,
 		HAS_YOFFSET: 0x02
-	};
-	_g.actionCodes = {
+	},
+	actionCodes: {
 		PLAY: 0x06,
 		STOP: 0x07,
 		NEXT_FRAME: 0x04,
@@ -161,17 +146,37 @@
 		STOP_SOUNDS: 0x09,
 		TOGGLE_QUALITY: 0x08,
 		SET_TARGET: 0x08b
-	};
-	_g.urlTargets = {
+	},
+	urlTargets: {
 		SELF: "_self",
 		BLANK: "_blank",
 		PARENT: "_parent",
 		TOP: "_top"
-	};
-	_g.USE_NATIVE_JSON = !!self.JSON;
-	_g.PX_IN_TWIPS = 20;
-	
-	_g.twips2px = function(twips){
-		return twips / _g.PX_IN_TWIPS;
-	};
-})();
+	},
+	bitmapFormats: {
+		COLORMAPPED: 3,
+		RGB15: 4,
+		RGB24: 5
+	},
+	PX_IN_TWIPS: 20
+};
+
+(function(){
+	var t = Gordon.tagCodes,
+		n = Gordon.tagNames,
+		h = Gordon.tagHandlers;
+	for(var name in t){
+		var code = t[name];
+		n[code] = name;
+		h[code] = "_handle" + name.toLowerCase().replace(/(^|_)([a-z])/g, function(match, p1, p2){
+			return p2.toUpperCase();
+		});
+	}
+}());
+
+var doc = global.document,
+	push = Array.prototype.push;
+
+function twips2px(twips){
+	return twips / Gordon.PX_IN_TWIPS;
+}

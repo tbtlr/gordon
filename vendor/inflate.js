@@ -718,7 +718,7 @@ function zip_inflate_internal(buff, off, size) {
     return n;
 }
 
-zip_inflate = function(str) {
+function zip_inflate(str) {
     var out, buff;
     var i, j;
 
