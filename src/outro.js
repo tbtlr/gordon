@@ -1,0 +1,2 @@
+	global.Gordon = Gordon;
+}(self));
