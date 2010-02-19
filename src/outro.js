@@ -1,2 +1,2 @@
-	global.Gordon = Gordon;
+    global.Gordon = Gordon;
 }(self));

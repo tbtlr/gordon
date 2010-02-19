@@ -13,10 +13,10 @@ task :default => :min
 
 task :gordon do
   sh 'cat vendor/* > ' + File.join(src_dir, 'vendor.js')
-	sh 'mkdir -p ' + dist_dir
-	sh 'cat ' + intro + ' > ' + output_file
-	sh 'for file in ' + base_files.join(' ') + "; do echo | cat $file - | sed 's/^/\t/' >> " + output_file + '; done'
-	sh 'cat ' + outro + ' >> ' + output_file
+  sh 'mkdir -p ' + dist_dir
+  sh 'cat ' + intro + ' > ' + output_file
+  sh 'for file in ' + base_files.join(' ') + "; do echo | cat $file - | sed 's/^/\t/' >> " + output_file + '; done'
+  sh 'cat ' + outro + ' >> ' + output_file
 end
 
 task :min => :gordon do
