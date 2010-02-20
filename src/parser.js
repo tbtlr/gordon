@@ -180,8 +180,8 @@
                             if((leftFill && rightFill) || (countFillChanges + countLineChanges) > 2){
                                 useSinglePath = false;
                             }
-                                if(flags & c.NEW_STYLES){
-                                 push.apply(fillStyles, t._readFillStyleArray());
+                            if(flags & c.NEW_STYLES){
+                                push.apply(fillStyles, t._readFillStyleArray());
                                 push.apply(lineStyles, t._readLineStyleArray());
                                 numFillBits = s.readUB(4);
                                 numLineBits = s.readUB(4);
@@ -331,18 +331,16 @@
                         case f.CLIPPED_BITMAP:
                             var imgId = s.readUI16(),
                                 img = dictionary[imgId],
-                                matrix = s.readMatrix();
+                                m = s.readMatrix();
                             if(img){
-                                with(matrix){
-                                    scaleX = twips2px(scaleX);
-                                    scaleY = twips2px(scaleY);
-                                    skewX = twips2px(skewX);
-                                    skewY = twips2px(skewY);
-                                }
+                                m.scaleX = twips2px(m.scaleX);
+                                m.scaleY = twips2px(m.scaleY);
+                                m.skewX = twips2px(m.skewX);
+                                m.skewY = twips2px(m.skewY);
                                 styles.push({
                                     type: "pattern",
                                     image: img,
-                                    matrix: matrix
+                                    matrix: m
                                 });
                             }else{ styles.push(null); }
                             break;
@@ -730,9 +728,16 @@
         };
         
         function cloneEdge(edge){
-            with(edge){
-                return {i: i, f: f, x1: x1, y1: y1, cx: cx, cy: cy, x2: x2, y2: y2};
-            }
+            return {
+                i: edge.i,
+                f: edge.f,
+                x1: edge.x1,
+                y1: edge.y1,
+                cx: edge.cx,
+                cy: edge.cy,
+                x2: edge.x2,
+                y2: edge.y2
+            };
         }
         
         function buildShape(edges, fill, stroke){
