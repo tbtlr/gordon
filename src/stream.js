@@ -271,7 +271,7 @@ Gordon.Stream.prototype = {
         return this._readCxform();
     },
     
-    readCxformWithAlpha: function(){
+    readCxformA: function(){
         return this._readCxform(true);
     },
     
