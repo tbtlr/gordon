@@ -380,33 +380,32 @@
                         }
                         return false;
                     };
-                    with(displayMap[b.HIT]){
-                        onmouseover = function(e){
-                            isMouseOver = true;
-                            if(!t.eventTarget){
-                                if(buttonMask & m.LEFT){ this.onmousedown(e); }
-                                else{ setState(b.OVER); }
-                            }
-                            return false;
-                        };
-                        onmouseout = function(e){
-                            isMouseOver = false;
-                            if(!t.eventTarget){ setState(this == t.eventTarget ? b.OVER : b.UP); }
-                            return false;
-                        };
-                        onmousedown = function(e){
-                            if(buttonMask & m.LEFT){
-                                setState(b.DOWN);
-                                doc.addEventListener("mouseup", mouseupHandle, false);
-                                t.eventTarget = this;
-                            }
-                            return false;
-                        };
-                        onmouseup = function(e){
-                            setState(b.OVER);
-                            return false;
-                        };
-                    }
+                    var d = displayMap[b.HIT];
+                    d.onmouseover = function(e){
+                        isMouseOver = true;
+                        if(!t.eventTarget){
+                            if(buttonMask & m.LEFT){ this.onmousedown(e); }
+                            else{ setState(b.OVER); }
+                        }
+                        return false;
+                    };
+                    d.onmouseout = function(e){
+                        isMouseOver = false;
+                        if(!t.eventTarget){ setState(this == t.eventTarget ? b.OVER : b.UP); }
+                        return false;
+                    };
+                    d.onmousedown = function(e){
+                        if(buttonMask & m.LEFT){
+                            setState(b.DOWN);
+                            doc.addEventListener("mouseup", mouseupHandle, false);
+                            t.eventTarget = this;
+                        }
+                        return false;
+                    };
+                    d.onmouseup = function(e){
+                        setState(b.OVER);
+                        return false;
+                    };
                     var currState = b.UP,
                         setState = function(state){
                             t._setAttributes(displayMap[currState], {opacity: 0});
@@ -437,32 +436,33 @@
     
     function color2string(color){
         if("string" == typeof color){ return REGEXP_IS_COLOR.test(color) ? color : null; }
-        with(color){
-            return "rgb(" + [red, green, blue] + ')';
-        }
+        return "rgb(" + [color.red, color.green, color.blue] + ')';
     }
     
     function matrix2string(matrix){
-        with(matrix){
-            return "matrix(" + [scaleX, skewX, skewY, scaleY, moveX, moveY] + ')';
-        }
+        return "matrix(" + [
+            matrix.scaleX, matrix.skewX,
+            matrix.skewY, matrix.scaleY,
+            matrix.moveX, matrix.moveY
+        ] + ')';
     }
     
     function cxform2string(cxform){
-        with(cxform){
-            return [multR, 0, 0, 0, addR, 0, multG, 0, 0, addG, 0, 0, multB, 0, addB, 0, 0, 0, multA, addA].toString();
-        }
+        return [
+            cxform.multR, 0, 0, 0, cxform.addR,
+            0, cxform.multG, 0, 0, cxform.addG,
+            0, 0, cxform.multB, 0, cxform.addB,
+            0, 0, 0, cxform.multA, cxform.addA
+        ].toString();
     }
     
     function cloneCharacter(character){
-        with(character){
-            return {
-                object: object,
-                depth: depth,
-                matrix: matrix,
-                cxform: character.cxform
-            };
-        }
+        return {
+            object: character.object,
+            depth: character.depth,
+            matrix: character.matrix,
+            cxform: character.cxform
+        };
     }
     
     if(doc){
