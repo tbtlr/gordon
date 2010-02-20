@@ -16,7 +16,7 @@
         t.quality = quality || Gordon.qualityValues.HIGH;
         t.scale = scale || Gordon.scaleValues.SHOW_ALL;
         t.bgcolor = bgcolor;
-        var n = t._node = t._createElement("svg");
+        var n = t.node = t._createElement("svg");
             attr = {
                 width: width,
                 height: height
@@ -56,8 +56,7 @@
             switch(quality){
                 case q.LOW:
                     var attr = {
-                        shape_rendering: "crispEdges",
-                        image_rendering: "optimizeSpeed",
+                        shape_rendering: "crispEdges", image_rendering: "optimizeSpeed",
                         text_rendering: "optimizeSpeed",
                         color_rendering: "optimizeSpeed"
                     }
@@ -101,20 +100,16 @@
             return t;
         },
         
-        getNode: function(){
-            return this._node;
-        },
-        
         setBgcolor: function(rgb){
             var t = this;
             if(!t.bgcolor){
-                t._node.style.background = color2string(rgb);
+                t.node.style.background = color2string(rgb);
                 t.bgcolor = rgb;
             }
             return t;
         },
         
-        defineObject: function(obj){
+        define: function(obj){
             var type = obj.type,
                 t = this,
                 node = null,
@@ -327,7 +322,7 @@
             return node;
         },
         
-        placeCharacter: function(character){
+        place: function(character){
             var depth = character.depth,
                 t = this,
                 d = t._displayList,
@@ -335,7 +330,7 @@
             if(!replace || replace.character !== character){
                 var node = t._buildCharacter(character),
                     s = t._stage;
-                if(replace && replace.character !== character){ t.removeCharacter(depth); }
+                if(replace && replace.character !== character){ t.remove(depth); }
                 if(1 == depth){ s.insertBefore(node, s.firstChild); }
                 else{
                     var nextDepth = 0;
@@ -423,7 +418,7 @@
             return node;
         },
         
-        removeCharacter: function(depth){
+        remove: function(depth){
             var d = this._displayList,
                 node = d[depth].node;
             node.parentNode.removeChild(node);

@@ -80,8 +80,8 @@
                 var id = s.readUI16(),
                     bounds = s.readRect(),
                     t = this,
-                    fillStyles = t._readFillStyleArray(),
-                    lineStyles = t._readLineStyleArray(),
+                    fillStyles = t._readFillStyles(),
+                    lineStyles = t._readLineStyles(),
                     numFillBits = s.readUB(4),
                     numLineBits = s.readUB(4),
                     segment = [],
@@ -122,7 +122,13 @@
                         }
                         x2 = Math.round(x2 * 100) / 100;
                         y2 = Math.round(y2 * 100) / 100;
-                        segment.push({i: i++, f: isFirst, x1: x1, y1: y1, cx: cx, cy: cy, x2: x2, y2: y2});
+                        segment.push({
+                            i: i++,
+                            f: isFirst,
+                            x1: x1, y1: y1,
+                            cx: cx, cy: cy,
+                            x2: x2, y2: y2
+                        });
                         isFirst = false;
                     }else{
                         if(segment.length){
@@ -181,8 +187,8 @@
                                 useSinglePath = false;
                             }
                             if(flags & c.NEW_STYLES){
-                                push.apply(fillStyles, t._readFillStyleArray());
-                                push.apply(lineStyles, t._readLineStyleArray());
+                                push.apply(fillStyles, t._readFillStyles());
+                                push.apply(lineStyles, t._readLineStyles());
                                 numFillBits = s.readUB(4);
                                 numLineBits = s.readUB(4);
                                 fsOffset = fillStyles.length;
@@ -214,7 +220,7 @@
                         if(list){ push.apply(fillEdges, list); }
                         var edgeMap = {};
                         fillEdges.forEach(function(edge){
-                            var key = calcPointKey(edge.x1, edge.y1),
+                            var key = calcPtKey(edge.x1, edge.y1),
                                 list = edgeMap[key];
                             if(!list){ list = edgeMap[key] = []; }
                             list.push(edge);
@@ -225,12 +231,12 @@
                             var edge = fillEdges[j];
                             if(!edge.c){
                                 var segment = [],
-                                    firstKey = calcPointKey(edge.x1, edge.y1),
+                                    firstKey = calcPtKey(edge.x1, edge.y1),
                                     usedMap = {};
                                 do{
                                     segment.push(edge);
                                     usedMap[edge.i] = true;
-                                    var key = calcPointKey(edge.x2, edge.y2);
+                                    var key = calcPtKey(edge.x2, edge.y2);
                                     if(key == firstKey){
                                         var k = segment.length;
                                         while(k--){ segment[k].c = true; }
@@ -297,7 +303,7 @@
                 return t;
             },
             
-            _readFillStyleArray: function(){
+            _readFillStyles: function(){
                 var numStyles = s.readUI8();
                 if(0xff == numStyles){ numStyles = s.readUI16(); }
                 var styles = [],
@@ -349,7 +355,7 @@
                 return styles;
             },
             
-            _readLineStyleArray: function(){
+            _readLineStyles: function(){
                 var numStyles = s.readUI8();
                 if(0xff == numStyles){ numStyles = s.readUI16(); }
                 var styles = [],
@@ -479,10 +485,10 @@
                             stack.push("t.stop()");
                             break;
                         case a.NEXT_FRAME:
-                            stack.push("t.nextFrame()");
+                            stack.push("t.next()");
                             break;
                         case a.PREVIOUS_FRAME:
-                            stack.push("t.prevFrame()");
+                            stack.push("t.prev()");
                             break;
                         case a.GOTO_FRAME:
                             var frame = s.readUI16();
@@ -494,7 +500,7 @@
                             stack.push("t.getURL('" + url + "', '" + target + "')");
                             break;
                         case a.TOGGLE_QUALITY:
-                            stack.push("t.toggleHighQuality()");
+                            stack.push("t.toggleQuality()");
                             break;
                         default:
                             s.seek(len);
@@ -731,12 +737,9 @@
             return {
                 i: edge.i,
                 f: edge.f,
-                x1: edge.x1,
-                y1: edge.y1,
-                cx: edge.cx,
-                cy: edge.cy,
-                x2: edge.x2,
-                y2: edge.y2
+                x1: edge.x1, y1: edge.y1,
+                cx: edge.cx, cy: edge.cy,
+                x2: edge.x2, y2: edge.y2
             };
         }
         
@@ -763,7 +766,7 @@
             };
         }
         
-        function calcPointKey(x, y){
+        function calcPtKey(x, y){
             return (x + 50000) * 100000 + y;
         }
         

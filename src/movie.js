@@ -35,8 +35,8 @@
         var d = t._dictionary = {},
             l = t._timeline = [];
         t._framesLoaded = 0;
-        t._isPlaying = false;
-        t._currFrame = -1;
+        t.isPlaying = false;
+        t.currentFrame = -1;
         new Gordon.Parser(xhr.responseText, function(obj){
             switch(obj.type){
                 case "header":
@@ -50,6 +50,7 @@
                     }
                     var r = t.renderer = t.renderer || Gordon.SvgRenderer;
                     t._renderer = new r(t.width, t.height, frmWidth, frmHeight, t.quality, t.scale, t.bgcolor);
+                    t.totalFrames = t._frameCount;
                     break;
                 case "frame":
                     var bgcolor = obj.bgcolor;
@@ -60,21 +61,21 @@
                     var action = obj.action;
                     if(action){ eval("obj.action = function(){ (" + action + "(t)); }"); }
                     l.push(obj);
-                    var f = ++t._framesLoaded;
-                    t.onprogress(t.percentLoaded());
-                    if(f == 1){
+                    var n = ++t._framesLoaded;
+                    t.onprogress(~~((n * 100) / t.totalFrames));
+                    if(n == 1){
                         if(t.id){
                             var stage = doc.getElementById(t.id);
                             stage.innerHTML = '';
-                            stage.appendChild(t._renderer.getNode());
+                            stage.appendChild(t._renderer.node);
                             t._changeReadyState(s.INTERACTIVE);
                         }
                         if(t.autoplay){ t.play(); }
-                        else{ t.gotoFrame(0); }
-                    }else if(f == t._frameCount){ t._changeReadyState(s.COMPLETE); }
+                        else{ t.goto(0); }
+                    }else if(n == t.totalFrames){ t._changeReadyState(s.COMPLETE); }
                     break;
                 default:
-                    t._renderer.defineObject(obj);
+                    t._renderer.define(obj);
                     d[obj.id] = obj;
             }
         });
@@ -88,42 +89,42 @@
         
         play: function(){
             var t = this,
-                c = t._currFrame,
-                timeout = 1100 / t._frameRate;
-            t._isPlaying = true;
-            if(c < t._frameCount - 1){
-                if(t._framesLoaded >= c){ t.gotoFrame(c + 1); }
+                c = t.currentFrame,
+                timeout = 1000 / t._frameRate;
+            t.isPlaying = true;
+            if(c < t.totalFrames - 1){
+                if(t._framesLoaded >= c){ t.goto(c + 1); }
                 else{ timeout = 0; }
             }else{
                 if(!t.loop){ return t.stop(); }
-                else{ t.gotoFrame(0); }
+                else{ t.goto(0); }
             }
             setTimeout(function(){
-                if(t._isPlaying){ t.play() };
+                if(t.isPlaying){ t.play() };
             }, timeout);
             return t;
         },
         
-        nextFrame: function(){
+        next: function(){
             var t = this,
-                c = t._currFrame;
-            t.gotoFrame(c < t._frameCount - 1 ? c + 1 : 0);
+                c = t.currentFrame;
+            t.goto(c < t.totalFrames - 1 ? c + 1 : 0);
             return t;
         },
         
-        gotoFrame: function gf(frameNum){
+        goto: function gf(frameNum){
             var t = this;
             if(gf.caller !== t.play){ t.stop(); }
-            if(t._currFrame != frameNum){
-                if(frameNum < t._currFrame){ t._currFrame = -1; }
-                while(t._currFrame != frameNum){
-                    var frame = t._timeline[++t._currFrame],
+            if(t.currentFrame != frameNum){
+                if(frameNum < t.currentFrame){ t.currentFrame = -1; }
+                while(t.currentFrame != frameNum){
+                    var frame = t._timeline[++t.currentFrame],
                         d = frame.displayList,
                         r = t._renderer;
                     for(var depth in d){
                         var character = d[depth];
-                        if(character){ r.placeCharacter(character); }
-                        else{ r.removeCharacter(depth); }
+                        if(character){ r.place(character); }
+                        else{ r.remove(depth); }
                     }
                     t.onenterframe(frameNum);
                     var action = frame.action;
@@ -134,36 +135,20 @@
         },
         
         stop: function(){
-            this._isPlaying = false;
+            this.isPlaying = false;
             return this;
         },
         
-        prevFrame: function(){
+        prev: function(){
             var t = this,
-                c = t._currFrame;
-            t.gotoFrame(c > 0 ? c - 1 : t._frameCount - 1);
+                c = t.currentFrame;
+            t.goto(c > 0 ? c - 1 : t.totalFrames - 1);
             return t;
         },
         
-        isPlaying: function(){
-            return this._isPlaying; 
-        },
-        
         rewind: function(){
-            this.gotoFrame(0);
+            this.goto(0);
             return this;
-        },
-        
-        totalFrames: function(){
-            return this._frameCount;
-        },
-        
-        percentLoaded: function(){
-            return Math.round((this._framesLoaded * 100) / this._frameCount);
-        },
-        
-        currentFrame: function(){
-            return this._currFrame;
         },
         
         getURL: function(url, target){
@@ -184,7 +169,7 @@
             return this;
         },
         
-        toggleHighQuality: function thq(){
+        toggleQuality: function thq(){
             var o = thq._orig,
                 t = this,
                 q = t.quality;
