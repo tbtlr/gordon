@@ -492,7 +492,7 @@
                             break;
                         case a.GOTO_FRAME:
                             var frame = s.readUI16();
-                            stack.push("t.goto(" + frame + ')');
+                            stack.push("t.goTo(" + frame + ')');
                             break;
                         case a.GET_URL:
                             var url = s.readString(),
