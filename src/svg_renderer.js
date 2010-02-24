@@ -115,7 +115,7 @@
                 node = null,
                 id = obj.id,
                 attr = {id: id},
-                d = t._dictionary;
+                d = t._dictionary,
                 item = d[id];
             if(!item || !item.node){
                 switch(type){

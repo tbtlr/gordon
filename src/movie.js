@@ -71,7 +71,7 @@
                             t._changeReadyState(s.INTERACTIVE);
                         }
                         if(t.autoplay){ t.play(); }
-                        else{ t.goto(0); }
+                        else{ t.goTo(0); }
                     }else if(n == t.totalFrames){ t._changeReadyState(s.COMPLETE); }
                     break;
                 default:
@@ -93,11 +93,11 @@
                 timeout = 1000 / t._frameRate;
             t.isPlaying = true;
             if(c < t.totalFrames - 1){
-                if(t._framesLoaded >= c){ t.goto(c + 1); }
+                if(t._framesLoaded >= c){ t.goTo(c + 1); }
                 else{ timeout = 0; }
             }else{
                 if(!t.loop){ return t.stop(); }
-                else{ t.goto(0); }
+                else{ t.goTo(0); }
             }
             setTimeout(function(){
                 if(t.isPlaying){ t.play() };
@@ -108,11 +108,11 @@
         next: function(){
             var t = this,
                 c = t.currentFrame;
-            t.goto(c < t.totalFrames - 1 ? c + 1 : 0);
+            t.goTo(c < t.totalFrames - 1 ? c + 1 : 0);
             return t;
         },
         
-        goto: function gf(frameNum){
+        goTo: function gf(frameNum){
             var t = this;
             if(gf.caller !== t.play){ t.stop(); }
             if(t.currentFrame != frameNum){
@@ -142,12 +142,12 @@
         prev: function(){
             var t = this,
                 c = t.currentFrame;
-            t.goto(c > 0 ? c - 1 : t.totalFrames - 1);
+            t.goTo(c > 0 ? c - 1 : t.totalFrames - 1);
             return t;
         },
         
         rewind: function(){
-            this.goto(0);
+            this.goTo(0);
             return this;
         },
         
