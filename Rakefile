@@ -2,7 +2,7 @@ src_dir = 'src'
 vendor_dir = 'vendor'
 dist_dir = 'dist'
 build_dir = 'build'
-base_names = [ 'base', 'movie', 'parser', 'stream', 'svg_renderer', 'vendor' ]
+base_names = [ 'base', 'decompile', 'inflate', 'lib', 'movie', 'parser', 'stream', 'svg_renderer', 'vendor']
 base_files = base_names.map { |file| File.join(src_dir, file + '.js') }
 intro = File.join(src_dir, 'intro.js')
 outro = File.join(src_dir, 'outro.js')
@@ -17,7 +17,7 @@ task :gordon do
   sh 'cat ' + File.join(vendor_dir, '*') + ' > ' + vendor
   sh 'mkdir -p ' + dist_dir
   sh 'cat ' + intro + ' > ' + output_file
-  sh 'for file in ' + base_files.join(' ') + "; do echo | cat $file - | sed 's/^/\t/' >> " + output_file + '; done'
+  sh 'for file in ' + base_files.join(' ') + "; do echo | cat $file - | sed 's/^/    /' >> " + output_file + '; done'
   sh 'cat ' + outro + ' >> ' + output_file
 end
 
