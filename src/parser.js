@@ -61,7 +61,7 @@
                           len = hdr & 0x3f;
                     if(len >= 0x3f){ len = s.readUI32(); }
                     var handl = h[code];
-                    if(this[handl]){ this[handl](s.tell(), len); }
+                    if(this[handl]){ this[handl](s.offset, len); }
                     else{ s.seek(len); }
                 }while(code && code != f);
             }while(code);
@@ -375,7 +375,7 @@
                         depth: depth,
                         matrix: s.readMatrix()
                     };
-                if(s.tell() - offset != len){
+                if(s.offset - offset != len){
                     var filterId = "x_" + (++currPrivateId);
                     this.ondata({
                         type: "filter",
@@ -416,7 +416,7 @@
             },
             
             _readJpeg: function(dataSize){
-                var offset = s.tell(),
+                var offset = s.offset(),
                     width = height = 0;
                 for(var i = 0; i < dataSize; i += 2){
                     var hdr = s.readUI16(true),
@@ -683,7 +683,7 @@
                     b = Gordon.bitmapFormats;
                 if(format == b.COLORMAPPED){ var colorTableSize = s.readUI8(); }
                 s.seek(2);
-                var d = zip_inflate(s.readString(len - (s.tell() - offset)));
+                var d = zip_inflate(s.readString(len - (s.offset - offset)));
                 switch(format){
                     case b.COLORMAPPED:
                         var colorTable = [];
