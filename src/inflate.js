@@ -9,9 +9,6 @@
                 buildChunk("IEND", '')),
             img = new Image;
         img.src = uri;
-        img.onerror = function(e){
-            alert(e.message);
-        }
         img.onload = function(){
             var canvas = doc.createElement("canvas");
             canvas.width = img.width;
