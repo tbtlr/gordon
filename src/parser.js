@@ -107,21 +107,19 @@
                         if(isStraight){
                             var isGeneral = s.readBool();
                             if(isGeneral){
-                                x2 += twips2px(s.readSB(numBits));
-                                y2 += twips2px(s.readSB(numBits));
+                                x2 += s.readSB(numBits);
+                                y2 += s.readSB(numBits);
                             }else{
                                 var isVertical = s.readBool();
-                                    if(isVertical){ y2 += twips2px(s.readSB(numBits)); }
-                                    else{ x2 += twips2px(s.readSB(numBits)); }
+                                    if(isVertical){ y2 += s.readSB(numBits); }
+                                    else{ x2 += s.readSB(numBits); }
                                 }
                         }else{
-                            cx = x1 + twips2px(s.readSB(numBits));
-                            cy = y1 + twips2px(s.readSB(numBits));
-                            x2 = cx + twips2px(s.readSB(numBits));
-                            y2 = cy + twips2px(s.readSB(numBits));
+                            cx = x1 + s.readSB(numBits);
+                            cy = y1 + s.readSB(numBits);
+                            x2 = cx + s.readSB(numBits);
+                            y2 = cy + s.readSB(numBits);
                         }
-                        x2 = Math.round(x2 * 100) / 100;
-                        y2 = Math.round(y2 * 100) / 100;
                         segment.push({
                             i: i++,
                             f: isFirst,
@@ -168,8 +166,8 @@
                         if(flags){
                             if(flags & c.MOVE_TO){
                                 var numBits = s.readUB(5);
-                                  x2 = twips2px(s.readSB(numBits));
-                                y2 = twips2px(s.readSB(numBits));
+                                  x2 = s.readSB(numBits);
+                                y2 = s.readSB(numBits);
                                 }
                                 if(flags & c.LEFT_FILL_STYLE){
                                 leftFill = s.readUB(numFillBits);
@@ -339,10 +337,10 @@
                                 img = dictionary[imgId],
                                 m = s.readMatrix();
                             if(img){
-                                m.scaleX = twips2px(m.scaleX);
-                                m.scaleY = twips2px(m.scaleY);
-                                m.skewX = twips2px(m.skewX);
-                                m.skewY = twips2px(m.skewY);
+                                m.scaleX = m.scaleX;
+                                m.scaleY = m.scaleY;
+                                m.skewX = m.skewX;
+                                m.skewY = m.skewY;
                                 styles.push({
                                     type: "pattern",
                                     image: img,
@@ -361,7 +359,7 @@
                 var styles = [],
                     i = numStyles;
                 while(i--){ styles.push({
-                    width: twips2px(s.readUI16()),
+                    width: s.readUI16(),
                     color: s.readRGB()
                 }); }
                 return styles;
@@ -416,7 +414,7 @@
             },
             
             _readJpeg: function(dataSize){
-                var offset = s.offset(),
+                var offset = s.offset,
                     width = height = 0;
                 for(var i = 0; i < dataSize; i += 2){
                     var hdr = s.readUI16(true),
@@ -611,9 +609,9 @@
                                 var f = Gordon.textStyleFlags;
                                 if(flags & f.HAS_FONT){ fontId = s.readUI16(); }
                                 if(flags & f.HAS_COLOR){ fill = s.readRGB(); }
-                                if(flags & f.HAS_XOFFSET){ x = twips2px(s.readSI16()); }
-                                if(flags & f.HAS_YOFFSET){ y = twips2px(s.readSI16()); }
-                                if(flags & f.HAS_FONT){ size = twips2px(s.readUI16()); }
+                                if(flags & f.HAS_XOFFSET){ x = s.readSI16(); }
+                                if(flags & f.HAS_YOFFSET){ y = s.readSI16(); }
+                                if(flags & f.HAS_FONT){ size = s.readUI16(); }
                             }
                             str = {
                                 font: dictionary[fontId].id,
@@ -630,7 +628,7 @@
                             while(i--){
                                 var entry = {};
                                 entry.index = s.readUB(numGlyphBits);
-                                entry.advance = twips2px(s.readSB(numAdvBits));
+                                entry.advance = s.readSB(numAdvBits);
                                 entries.push(entry);
                             }
                             s.align();
