@@ -157,8 +157,7 @@ var Gordon = {
         COLORMAPPED: 3,
         RGB15: 4,
         RGB24: 5
-    },
-    PX_IN_TWIPS: 20
+    }
 };
 
 (function(){
@@ -176,7 +175,3 @@ var Gordon = {
 
 var doc = global.document,
     push = Array.prototype.push;
-
-function twips2px(twips){
-    return twips / Gordon.PX_IN_TWIPS;
-}
