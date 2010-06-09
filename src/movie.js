@@ -17,24 +17,11 @@
         
     Gordon.Movie = function(url, options){
         var t = this,
-            s = Gordon.readyStates,
-            stage = null;
+            s = Gordon.readyStates;
         t.url = url;
         for(var prop in defaults){ t[prop] = undefined != options[prop] ? options[prop] : defaults[prop]; }
         if(!url){ throw new Error("URL of a SWF movie file must be passed as first argument"); }
         t._startTime = +new Date;
-        var id = t.id;
-        if(id){
-            stage = t._stage = doc.getElementById(id);
-            stage.innerHTML = '';
-            var bgcolor = t.bgcolor,
-                style = stage.style;
-            if(t.bgcolor){ style.backgroundColor = t.bgcolor; }
-            if(t.poster){
-                style.backgroundImage = poster;
-                style.backgroundPosition = "center center";
-            }
-        }
         t.framesLoaded = 0;
         t.isPlaying = false;
         t.currentFrame = 0;
@@ -53,13 +40,24 @@
                     var f = t._frameSize,
                         frmWidth = f.right - f.left,
                         frmHeight = f.bottom - f.top,
-                        r = t.renderer = t.renderer || Gordon.SvgRenderer;
+                        r = t.renderer = t.renderer || Gordon.SvgRenderer,
+                        id = t.id;
                     if(!(t.width && t.height)){
                         t.width = frmWidth / 20;
                         t.height = frmHeight / 20;
                     };
                     t._renderer = new r(t.width, t.height, frmWidth, frmHeight, t.quality, t.scale, t.bgcolor);
                     t.totalFrames = t._frameCount;
+                    if(id){
+                        var stage = doc.getElementById(id),
+                            bgcolor = t.bgcolor,
+                            bgParts = [],
+                            poster = t.poster;
+                        stage.innerHTML = '';
+                        if(t.bgcolor){ bgParts.push(bgcolor); }
+                        if(poster){ bgParts.push(poster, "center center"); }
+                        stage.setAttribute("style", "background: " + bgParts.join(' '));
+                    }
                     t._changeReadyState(s.LOADED);
                     break;
                 case "frame":
