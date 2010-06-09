@@ -1,45 +1,48 @@
 (function(){
-    var useNativeJson = !!global.JSON;
-    
-    if(doc && global.Worker){
-        var REGEXP_SCRIPT_SRC = /(^|.*\/)gordon.(min\.)?js$/;
+    if(false && doc && window.Worker){
+        var src = (function(){
+                var REGEXP_SCRIPT_SRC = /(^|.*\/)gordon.(min\.)?js$/,
+                    scripts = doc.getElementsByTagName("script"),
+                    i = scripts.length;
+                    while(i--){
+                        var path = scripts[i].src;
+                        if(REGEXP_SCRIPT_SRC.test(path)){ return path; }
+                    }
+                })(),
+                worker = new Worker(src);
         
-        var scripts = doc.getElementsByTagName("script"),
-            src = "gordon.min.js",
-            i = scripts.length;
-        while(i--){
-            var match = REGEXP_SCRIPT_SRC.exec(scripts[i].src);
-            if(match){
-                src = match[0];
-                break;
-            }
-        }
         Gordon.Parser = function(data, ondata){
-            var t = this;
+            var t = this,
+                w = t._worker = worker;
             t.data = data;
             t.ondata = ondata;
-            var w = t._worker = new Worker(src);
-            w.onerror = function(){};
+            
+            w.onerror = function(e){ };
+            
             w.onmessage = function(e){
-                t.ondata(useNativeJson ? JSON.parse(e.data) : e.data);
-            }
+                t.ondata(e.data);
+            };
+            
             w.postMessage(data);
         };
     }else{
-        var s = currFrame = null,
-            dictionary = {},
-            currPrivateId = 0,
-            jpegTables = null;
-        
-        Gordon.Parser = function(data, ondata){
-            if(ondata) { this.ondata = ondata; }
-            s = new Gordon.Stream(data);
-            var sign = s.readString(3),
-                v = Gordon.validSignatures;
-            if(sign != v.SWF && sign != v.COMPRESSED_SWF){ throw new Error(url + " is not a SWF movie file"); }
-            var version = s.readUI8(),
-                fileLen = s.readUI32();
-            if(sign == v.COMPRESSED_SWF){ s.decompress(); }
+        Gordon.Parser = function(url, ondata){
+            var xhr = new XMLHttpRequest(),
+                t = this;
+            xhr.open("GET", url, false);
+            xhr.overrideMimeType("text/plain; charset=x-user-defined");
+            xhr.send();
+            if(200 != xhr.status){ throw new Error("Unable to load " + url + " status: " + xhr.status); }
+            if(ondata) { t.ondata = ondata; }
+            var s = t._stream = new Gordon.Stream(xhr.responseText),
+                sign = s.readString(3),
+                v = Gordon.validSignatures,
+                version = s.readUI8(),
+                fileLen = s.readUI32(),
+                h = Gordon.tagHandlers,
+                f = Gordon.tagCodes.SHOW_FRAME;
+            if(sign == v.COMPRESSED_SWF){ s.uncompress(); }
+            else if(sign != v.SWF){ throw new Error(url + " is not a SWF movie file"); }
             this.ondata({
                 type: "header",
                 version: version,
@@ -48,53 +51,87 @@
                 frameRate: s.readUI16() / 256,
                 frameCount: s.readUI16()
             });
-            var h = Gordon.tagHandlers,
-                f = Gordon.tagCodes.SHOW_FRAME;
+            t._dictionary = {};
+            t._jpegTables = null;
             do{
-                currFrame = {
+                var frm = {
                     type: "frame",
                     displayList: {}
                 };
                 do{
                     var hdr = s.readUI16(),
-                          code = hdr >> 6,
-                          len = hdr & 0x3f;
-                    if(len >= 0x3f){ len = s.readUI32(); }
-                    var handl = h[code];
-                    if(this[handl]){ this[handl](s.offset, len); }
-                    else{ s.seek(len); }
+                        code = hdr >> 6,
+                        len = hdr & 0x3f,
+                        handl = h[code];
+                    if(0x3f == len){ len = s.readUI32(); }
+                    var offset = s.offset;
+                    if(code){
+                        if(code == f){
+                            t.ondata(frm);
+                            break;
+                        }
+                        if(t[handl]){ t[handl](s, offset, len, frm); }
+                        else{ s.seek(len); }
+                    }
                 }while(code && code != f);
             }while(code);
         };
         Gordon.Parser.prototype = {
             ondata: function(data){
-                postMessage(useNativeJson ? JSON.stringify(data) : data);
+                postMessage(data);
             },
             
-            _handleShowFrame: function(){
-                this.ondata(currFrame);
-                return this;
-            },
-            
-            _handleDefineShape: function(){
+            _handleDefineShape: function(s, offset, len, frm, withAlpha){
                 var id = s.readUI16(),
-                    bounds = s.readRect(),
+                    shape = {
+                        type: "shape",
+                        id: id,
+                        bounds: s.readRect()
+                    }
                     t = this,
-                    fillStyles = t._readFillStyles(),
-                    lineStyles = t._readLineStyles(),
-                    numFillBits = s.readUB(4),
+                    fillStyles = t._readFillStyles(s, withAlpha),
+                    lineStyles = t._readLineStyles(s, withAlpha),
+                    edges = t._readEdges(s, fillStyles, lineStyles, withAlpha);
+                if(edges instanceof Array){
+                    var segments = shape.segments = [];
+                    for(var i = 0, seg = edges[0]; seg; seg = edges[++i]){ segments.push({
+                        id: id + '_' + (i + 1),
+                        commands: edges2cmds(seg.records, !!seg.line),
+                        fill: seg.fill,
+                        line: seg.line
+                    }); }
+                }else{
+                    shape.commands = edges2cmds(edges.records, !!edges.line),
+                    shape.fill = edges.fill,
+                    shape.line = edges.line
+                }
+                t.ondata(shape);
+                t._dictionary[id] = shape;
+                return t;
+            },
+            
+            _readEdges: function(s, fillStyles, lineStyles, withAlpha, morph){
+                var numFillBits = s.readUB(4),
                     numLineBits = s.readUB(4),
-                    segment = [],
+                    x1 = 0,
+                    y1 = 0,
+                    x2 = 0,
+                    y2 = 0,
+                    seg = [],
+                    i = 0,
                     isFirst = true,
                     edges = [],
-                    leftFill = rightFill = fsOffset = lsOffset = 0,
+                    leftFill = 0,
+                    rightFill = 0,
+                    fsOffset = 0,
+                    lsOffset = 0,
                     leftFillEdges = {},
                     rightFillEdges = {},
-                    i = line = 0,
+                    line = 0,
                     lineEdges = {},
                     c = Gordon.styleChangeStates,
-                    x1 = y1 = x2 = y2 = 0,
-                    countFillChanges = countLineChanges = 0,
+                    countFChanges = 0,
+                    countLChanges = 0,
                     useSinglePath = true;
                 do{
                     var type = s.readUB(1),
@@ -102,8 +139,10 @@
                     if(type){
                         var isStraight = s.readBool(),
                             numBits = s.readUB(4) + 2,
-                            cx = cy = null;
-                        x1 = x2, y1 = y2;
+                            cx = null,
+                            cy = null;
+                        x1 = x2;
+                        y1 = y2;
                         if(isStraight){
                             var isGeneral = s.readBool();
                             if(isGeneral){
@@ -120,7 +159,7 @@
                             x2 = cx + s.readSB(numBits);
                             y2 = cy + s.readSB(numBits);
                         }
-                        segment.push({
+                        seg.push({
                             i: i++,
                             f: isFirst,
                             x1: x1, y1: y1,
@@ -129,13 +168,12 @@
                         });
                         isFirst = false;
                     }else{
-                        if(segment.length){
-                            push.apply(edges, segment);
+                        if(seg.length){
+                            push.apply(edges, seg);
                             if(leftFill){
-                                var indx = fsOffset + leftFill,
-                                    list = leftFillEdges[indx];
-                                if(!list){ list = leftFillEdges[indx] = []; }
-                                segment.forEach(function(edge){
+                                var idx = fsOffset + leftFill,
+                                    list = leftFillEdges[idx] || (leftFillEdges[idx] = []);
+                                for(var j = 0, edge = seg[0]; edge; edge = seg[++j]){
                                     var e = cloneEdge(edge),
                                         tx1 = e.x1,
                                         ty1 = e.y1;
@@ -145,206 +183,186 @@
                                     e.x2 = tx1;
                                     e.y2 = ty1;
                                     list.push(e);
-                                });
+                                }
                             }
                             if(rightFill){
-                                var indx = fsOffset + rightFill,
-                                    list = rightFillEdges[indx];
-                                if(!list){ list = rightFillEdges[indx] = []; }
-                                push.apply(list, segment);
+                                var idx = fsOffset + rightFill,
+                                    list = rightFillEdges[idx] || (rightFillEdges[idx] = []);
+                                push.apply(list, seg);
                             }
                             if(line){
-                                var indx = lsOffset + line,
-                                    list = lineEdges[indx];
-                                if(!list){ list = lineEdges[indx] = []; }
-                                push.apply(list, segment);
+                                var idx = lsOffset + line,
+                                    list = lineEdges[idx] || (lineEdges[idx] = []);
+                                push.apply(list, seg);
                             }
-                            segment = [];
+                            seg = [];
                             isFirst = true;
                         }
                         var flags = s.readUB(5);
                         if(flags){
                             if(flags & c.MOVE_TO){
                                 var numBits = s.readUB(5);
-                                  x2 = s.readSB(numBits);
+                                x2 = s.readSB(numBits);
                                 y2 = s.readSB(numBits);
-                                }
-                                if(flags & c.LEFT_FILL_STYLE){
-                                leftFill = s.readUB(numFillBits);
-                                countFillChanges++;
                             }
-                                if(flags & c.RIGHT_FILL_STYLE){
+                            if(flags & c.LEFT_FILL_STYLE){
+                                leftFill = s.readUB(numFillBits);
+                                countFChanges++;
+                            }
+                            if(flags & c.RIGHT_FILL_STYLE){
                                 rightFill = s.readUB(numFillBits);
-                                countFillChanges++;
+                                countFChanges++;
                             }
                             if(flags & c.LINE_STYLE){
                                 line = s.readUB(numLineBits);
-                                countLineChanges++;
+                                countLChanges++;
                             }
-                            if((leftFill && rightFill) || (countFillChanges + countLineChanges) > 2){
-                                useSinglePath = false;
-                            }
+                            if((leftFill && rightFill) || countFChanges + countLChanges > 2){ useSinglePath = false; }
                             if(flags & c.NEW_STYLES){
-                                push.apply(fillStyles, t._readFillStyles());
-                                push.apply(lineStyles, t._readLineStyles());
-                                numFillBits = s.readUB(4);
-                                numLineBits = s.readUB(4);
                                 fsOffset = fillStyles.length;
                                 lsOffset = lineStyles.length;
+                                push.apply(fillStyles, t._readFillStyles(s, withAlpha || morph));
+                                push.apply(lineStyles, t._readLineStyles(s, withAlpha || morph));
+                                numFillBits = s.readUB(4);
+                                numLineBits = s.readUB(4);
                                 useSinglePath = false;
                             }
                         }
                     }
                 }while(type || flags);
                 s.align();
-                var shape = null,
-                    shapeId = 's_' + id;
                 if(useSinglePath){
-                    var fill = leftFill || rightFill,
-                        fillStyle = fill ? fillStyles[fsOffset + fill - 1] : null,
-                        lineStyle = lineStyles[lsOffset + line - 1];
-                    shape = buildShape(edges, fillStyle, lineStyle);
-                    shape.id = shapeId;
-                    shape.bounds = bounds;
+                    var fill = leftFill || rightFill;
+                    return {
+                        records: edges,
+                        fill: fill ? fillStyles[fsOffset + fill - 1] : null,
+                        line: lineStyles[lsOffset + line - 1]
+                    };
                 }else{
-                    var fillShapes = [],
-                        i = fillStyles.length;
-                    while(i--){
+                    var segments = [];
+                    for(var i = 0; fillStyles[i]; i++){
                         var fill = i + 1,
-                            list = leftFillEdges[fill];
-                        fillEdges = [];
+                            list = leftFillEdges[fill],
+                            fillEdges = [],
+                            edgeMap = {};
                         if(list){ push.apply(fillEdges, list); }
                         list = rightFillEdges[fill];
                         if(list){ push.apply(fillEdges, list); }
-                        var edgeMap = {};
-                        fillEdges.forEach(function(edge){
+                        for(var j = 0, edge = fillEdges[0]; edge; edge = fillEdges[++j]){
                             var key = calcPtKey(edge.x1, edge.y1),
-                                list = edgeMap[key];
-                            if(!list){ list = edgeMap[key] = []; }
+                                list = edgeMap[key] || (edgeMap[key] = []);
                             list.push(edge);
-                        });
-                        var pathEdges = [],
-                            countFillEdges = fillEdges.length;
-                        for(var j = 0; j < countFillEdges && !pathEdges[countFillEdges - 1]; j++){
+                        }
+                        var recs = [],
+                            countFillEdges = fillEdges.length,
+                            l = countFillEdges - 1;
+                        for(var j = 0; j < countFillEdges && !recs[l]; j++){
                             var edge = fillEdges[j];
                             if(!edge.c){
-                                var segment = [],
+                                var seg = [],
                                     firstKey = calcPtKey(edge.x1, edge.y1),
                                     usedMap = {};
                                 do{
-                                    segment.push(edge);
+                                    seg.push(edge);
                                     usedMap[edge.i] = true;
-                                    var key = calcPtKey(edge.x2, edge.y2);
+                                    var key = calcPtKey(edge.x2, edge.y2),
+                                        list = edgeMap[key],
+                                        favEdge = fillEdges[j + 1],
+                                        nextEdge = null;
                                     if(key == firstKey){
-                                        var k = segment.length;
-                                        while(k--){ segment[k].c = true; }
-                                        push.apply(pathEdges, segment);
+                                        var k = seg.length;
+                                        while(k--){ seg[k].c = true; }
+                                        push.apply(recs, seg);
                                         break;
                                     }
-                                    var list = edgeMap[key];
                                     if (!(list && list.length)){ break; }
-                                    var favEdge = fillEdges[j + 1],
-                                        nextEdge = null;
                                     for(var k = 0; list[k]; k++){
                                         var entry = list[k];
-                                          if(entry == favEdge && !entry.c){
-                                              list.splice(k, 1);
-                                              nextEdge = entry;
-                                          }
-                                      }
+                                        if(entry == favEdge && !entry.c){
+                                            list.splice(k, 1);
+                                            nextEdge = entry;
+                                        }
+                                    }
                                     if(!nextEdge){
-                                          for(var k = 0; list[k]; k++){
-                                              var entry = list[k];
-                                              if(!(entry.c || usedMap[entry.i])){ nextEdge = entry; }
-                                          }
+                                        for(var k = 0; list[k]; k++){
+                                            var entry = list[k];
+                                            if(!(entry.c || usedMap[entry.i])){ nextEdge = entry; }
+                                        }
                                     }
                                     edge = nextEdge;
                                 }while(edge);
                             }
                         }
-                        if(pathEdges.length){
-                            shape = buildShape(pathEdges, fillStyles[i]);
-                            shape.index = pathEdges.pop().i;
-                            fillShapes.push(shape);
-                        }
+                        var l = recs.length;
+                        if(l){ segments.push({
+                            records: recs,
+                            fill: fillStyles[i],
+                            index: recs[l - 1].i
+                        }); }
                     }
-                    var strokeShapes = [],
-                        i = lineStyles.length;
+                    var i = lineStyles.length;
                     while(i--){
-                        var pathEdges = lineEdges[i + 1];
-                        if(pathEdges){
-                            shape = buildShape(pathEdges, null, lineStyles[i]);
-                            shape.index = pathEdges.pop().i;
-                            strokeShapes.push(shape);
-                        }
+                        var recs = lineEdges[i + 1];
+                        if(recs){ segments.push({
+                            records: recs,
+                            line: lineStyles[i],
+                            index: recs[recs.length - 1].i
+                        }); }
                     }
-                    var segments = fillShapes.concat(strokeShapes);
                     segments.sort(function(a, b){
                         return a.index - b.index;
                     });
-                    if(segments.length > 1){
-                        segments.forEach(function(shape, i){ shape.id = shapeId + '_' + (i + 1); });
-                        shape = {
-                            type: "shape",
-                            id: shapeId,
-                            bounds: bounds,
-                            segments: segments
-                        }
-                    }else{
-                        delete shape.index;
-                        shape.id = shapeId;
-                        shape.bounds = bounds;
-                    }
+                    if(segments.length > 1){ return segments; }
+                    else{ return segments[0]; }
                 }
-                t.ondata(shape);
-                dictionary[id] = shape;
-                return t;
             },
             
-            _readFillStyles: function(){
-                var numStyles = s.readUI8();
+            _readFillStyles: function(s, withAlpha, morph){
+                var numStyles = s.readUI8(),
+                    styles = [];
                 if(0xff == numStyles){ numStyles = s.readUI16(); }
-                var styles = [],
-                    i = numStyles;
-                while(i--){
+                while(numStyles--){
                     var type = s.readUI8(),
                         f = Gordon.fillStyleTypes;
                     switch(type){
                         case f.SOLID:
-                            styles.push(s.readRGB());
+                            if(morph){ styles.push([s.readRGBA(), s.readRGBA()]); }
+                            else{ styles.push(withAlpha ? s.readRGBA() : s.readRGB()); }
                             break;
                         case f.LINEAR_GRADIENT:
                         case f.RADIAL_GRADIENT:
-                            var style = {
+                            if(morph){ var matrix = [nlizeMatrix(s.readMatrix()), nlizeMatrix(s.readMatrix())]; }
+                            else{ var matrix = nlizeMatrix(s.readMatrix()); }
+                            var stops = [],
+                                style = {
                                     type: type == f.LINEAR_GRADIENT ? "linear" : "radial",
-                                    matrix: s.readMatrix(),
-                                    spread: s.readUB(2),
-                                    interpolation: s.readUB(2),
-                                    stops: []
+                                    matrix: matrix,
+                                    spread: morph ? Godon.spreadModes.PAD : s.readUB(2),
+                                    interpolation: morph ? Godon.interpolationModes.RGB : s.readUB(2),
+                                    stops: stops
                                 },
-                                numStops = s.readUB(4),
-                                stops = style.stops,
-                                j = numStops;
-                            while(j--){ stops.push({
-                                offset: s.readUI8() / 255,
-                                color: s.readRGB()
-                            }); }
+                                numStops = s.readUB(4);
+                            while(numStops--){
+                                var offset = s.readUI8() / 255,
+                                    color = withAlpha || morph ? s.readRGBA() : s.readRGB();
+                                stops.push({
+                                    offset: morph ? [offset, s.readUI8() / 255] : offset,
+                                    color: morph ? [color, s.readRGBA()] : color
+                                });
+                            }
                             styles.push(style);
                             break;
                         case f.REPEATING_BITMAP:
                         case f.CLIPPED_BITMAP:
                             var imgId = s.readUI16(),
-                                img = dictionary[imgId],
-                                m = s.readMatrix();
+                                img = this._dictionary[imgId],
+                                matrix = morph ? [s.readMatrix(), s.readMatrix()] : s.readMatrix();
                             if(img){
-                                m.scaleX = m.scaleX;
-                                m.scaleY = m.scaleY;
-                                m.skewX = m.skewX;
-                                m.skewY = m.skewY;
                                 styles.push({
                                     type: "pattern",
                                     image: img,
-                                    matrix: m
+                                    matrix: matrix,
+                                    repeat: type == f.REPEATING_BITMAP
                                 });
                             }else{ styles.push(null); }
                             break;
@@ -353,252 +371,220 @@
                 return styles;
             },
             
-            _readLineStyles: function(){
-                var numStyles = s.readUI8();
+            _readLineStyles: function(s, withAlpha, morph){
+                var numStyles = s.readUI8(),
+                    styles = [];
                 if(0xff == numStyles){ numStyles = s.readUI16(); }
-                var styles = [],
-                    i = numStyles;
-                while(i--){ styles.push({
-                    width: s.readUI16(),
-                    color: s.readRGB()
-                }); }
+                while(numStyles--){
+                    var width = s.readUI16(),
+                        color = withAlpha || morph ? s.readRGBA() : s.readRGB()
+                    styles.push({
+                        width: morph ? [width, s.readUI16()] : width,
+                        color: morph ? [color, s.readRGBA()] : color
+                    });
+                }
                 return styles;
             },
             
-            _handlePlaceObject: function(offset, len){
-                var id = s.readUI16(),
+            _handlePlaceObject: function(s, offset, len, frm){
+                var objId = s.readUI16(),
                     depth = s.readUI16(),
+                    t = this,
                     character = {
-                        object: dictionary[id].id,
+                        object: t._dictionary[objId].id,
                         depth: depth,
                         matrix: s.readMatrix()
                     };
-                if(s.offset - offset != len){
-                    var filterId = "x_" + (++currPrivateId);
-                    this.ondata({
-                        type: "filter",
-                        id: filterId,
-                        cxform: s.readCxform()
-                    });
-                    character.filter = filterId;
-                }
-                currFrame.displayList[depth] = character;
-                return this;
+                if(s.offset - offset != len){ character.cxform = s.readCxform(); }
+                frm.displayList[depth] = character;
+                return t;
             },
             
-            _handleRemoveObject: function(){
+            _handleRemoveObject: function(s, offset, len, frm){
                 var id = s.readUI16(),
                     depth = s.readUI16();
-                currFrame.displayList[depth] = null;
+                frm.displayList[depth] = null;
                 return this;
             },
             
-            _handleDefineBits: function(offset, len, withTables){
+            _handleDefineBits: function(s, offset, len, frm, withAlpha){
                 var id = s.readUI16(),
-                    jpg = this._readJpeg(len - 2);
-                if(withTables){ var data = encodeBase64(jpg.data); }
-                else{
-                    var header = jpegTables.substr(0, jpegTables.length - 2),
-                        data = encodeBase64(header + jpg.data.substr(2));
-                }
-                var img = {
-                    type: "image",
-                    id: "i_" + id,
-                    uri: "data:image/jpeg;base64," + data,
-                    width: jpg.width,
-                    height: jpg.height
-                };
-                this.ondata(img);
-                dictionary[id] = img;
-                return this;
-            },
-            
-            _readJpeg: function(dataSize){
-                var offset = s.offset,
-                    width = height = 0;
-                for(var i = 0; i < dataSize; i += 2){
-                    var hdr = s.readUI16(true),
-                        len = s.readUI16(true);
-                    if(hdr == 0xffc0){
-                        s.seek(1);
-                        var height = s.readUI16(true),
-                            width = s.readUI16(true);
+                    img = {
+                        type: "image",
+                        id: id,
+                        width: 0,
+                        height: 0
+                    },
+                    t = this,
+                    h = t._jpegTables;
+                if(withAlpha){
+                    var alphaDataOffset = s.readUI32(),
+                        data = s.readString(alphaDataOffset);
+                    img.alphaData = s.readString(len - (s.offset - offset));
+                }else{ var data = s.readString(len - 2); }
+                for(var i = 0; data[i]; i++){
+                    var word = ((data.charCodeAt(i) & 0xff) << 8) | (data.charCodeAt(++i) & 0xff);
+                    if(0xffd9 == word){
+                        word = ((data.charCodeAt(++i) & 0xff) << 8) | (data.charCodeAt(++i) & 0xff);
+                        if(word == 0xffd8){
+                            data = data.substr(0, i - 4) + data.substr(i);
+                            i -= 4;
+                        }
+                    }else if(0xffc0 == word){
+                        i += 3;
+                        img.height = ((data.charCodeAt(++i) & 0xff) << 8) | (data.charCodeAt(++i) & 0xff);
+                        img.width = ((data.charCodeAt(++i) & 0xff) << 8) | (data.charCodeAt(++i) & 0xff);
                         break;
                     }
                 }
-                s.seek(offset, true);
-                return {
-                    data: s.readString(dataSize),
-                    width: width,
-                    height: height
-                };
+                img.data = h ? h.substr(0, h.length - 2) + data.substr(2) : data;
+                t.ondata(img);
+                t._dictionary[id] = img;
+                return t;
             },
             
-            _handleDefineButton: function(){
+            _handleDefineButton: function(s, offset, len, frm, withActions){
                 var id = s.readUI16(),
-                    states = {};
+                    t = this,
+                    d = t._dictionary,
+                    states = {},
+                    button = {
+                        type: "button",
+                        id: id,
+                        states: states,
+                        trackAsMenu: withActions ? s.readBool(8) : false
+                    };
+                    if(withActions){ s.seek(2); }
                 do{
                     var flags = s.readUI8();
                     if(flags){
-                        var objectId = s.readUI16(),
+                        var objId = s.readUI16(),
                             depth = s.readUI16(),
+                            state = 0x01,
                             character = {
-                                object: dictionary[objectId].id,
+                                object: d[objId].id,
                                 depth: depth,
                                 matrix: s.readMatrix()
-                            },
-                            state = 0x01;
+                            };
                         while(state <= 0x08){
                             if(flags & state){
-                                var list = states[state];
-                                if(!list){ list = states[state] = {}; }
+                                var list = states[state] || (states[state] = {});
                                 list[depth] = character;
                             }
                             state <<= 1;
                         }
                     }
                 }while(flags);
-                var button = {
-                    type: "button",
-                    id: "b_" + id,
-                    states: states,
-                    action: this._readAction()
-                };
-                this.ondata(button);
-                dictionary[id] = button;
+                button.action = t._readAction(s, s.offset, len - (s.offset - offset));
+                t.ondata(button);
+                d[id] = button;
+                return t;
+            },
+            
+            _readAction: function(s, offset, len){
+                s.seek(len - (s.offset - offset));
+                return '';
+            },
+            
+            _handleJpegTables: function(s, offset, len){
+                this._jpegTables = s.readString(len);
                 return this;
             },
             
-            _readAction: function(){
-                var stack = [];
-                do{
-                    var code = s.readUI8(),
-                        len = code > 0x80 ? s.readUI16() : 0,
-                        a = Gordon.actionCodes;
-                    switch(code){
-                        case a.PLAY:
-                            stack.push("t.play()");
-                            break;
-                        case a.STOP:
-                            stack.push("t.stop()");
-                            break;
-                        case a.NEXT_FRAME:
-                            stack.push("t.next()");
-                            break;
-                        case a.PREVIOUS_FRAME:
-                            stack.push("t.prev()");
-                            break;
-                        case a.GOTO_FRAME:
-                            var frame = s.readUI16();
-                            stack.push("t.goTo(" + frame + ')');
-                            break;
-                        case a.GET_URL:
-                            var url = s.readString(),
-                                target = s.readString();
-                            stack.push("t.getURL('" + url + "', '" + target + "')");
-                            break;
-                        case a.TOGGLE_QUALITY:
-                            stack.push("t.toggleQuality()");
-                            break;
-                        default:
-                            s.seek(len);
-                    }
-                }while(code);
-                return "function(t){" + stack.join(';') + "}";
-            },
-            
-            _handleJpegTables: function(offset, len){
-                jpegTables = s.readString(len);
+            _handleSetBackgroundColor: function(s, offset, len, frm){
+                frm.bgcolor = s.readRGB();
                 return this;
             },
             
-            _handleSetBackgroundColor: function(){
-                currFrame.bgcolor = s.readRGB();
-                return this;
-            },
-            
-            _handleDefineFont: function(){
+            _handleDefineFont: function(s){
                 var id = s.readUI16(),
-                    numGlyphs = s.readUI16() / 2;
-                s.seek(numGlyphs * 2 - 2);
-                var c = Gordon.styleChangeStates,
+                    numGlyphs = s.readUI16() / 2,
                     glyphs = [],
-                    i = numGlyphs;
-                while(i--){
-                    var numFillBits = s.readUB(4),
-                        numLineBits = s.readUB(4),
-                        x = y = 0,
-                        commands = [];
-                    do{
-                        var type = s.readUB(1),
-                            flags = null;
-                        if(type){
-                            var isStraight = s.readBool(),
-                                numBits = s.readUB(4) + 2;
-                            if(isStraight){
-                                var isGeneral = s.readBool();
-                                if(isGeneral){
-                                    x += s.readSB(numBits);
-                                    y += s.readSB(numBits);
-                                    commands.push('L', x, -y);
-                                }else{
-                                    var isVertical = s.readBool();
-                                        if(isVertical){
-                                        y += s.readSB(numBits);
-                                        commands.push('V', -y);
-                                    }else{
-                                        x += s.readSB(numBits);
-                                        commands.push('H', x);
-                                    }
-                                    }
+                    t = this,
+                    font = {
+                        type: "font",
+                        id: id,
+                        glyphs: glyphs
+                    };
+                s.seek(numGlyphs * 2 - 2);
+                while(numGlyphs--){ glyphs.push(t._readGlyph(s)); }
+                t.ondata(font);
+                t._dictionary[id] = font;
+                return t;
+            },
+            
+            _readGlyph: function(s){
+                var numFillBits = s.readUB(4),
+                    numLineBits = s.readUB(4),
+                    x = 0,
+                    y = 0,
+                    cmds = [],
+                    c = Gordon.styleChangeStates;
+                do{
+                    var type = s.readUB(1),
+                        flags = null;
+                    if(type){
+                        var isStraight = s.readBool(),
+                            numBits = s.readUB(4) + 2;
+                        if(isStraight){
+                            var isGeneral = s.readBool();
+                            if(isGeneral){
+                                x += s.readSB(numBits);
+                                y += s.readSB(numBits);
+                                cmds.push('L' + x + ',' + y);
                             }else{
-                                var cx = x + s.readSB(numBits),
-                                    cy = y + s.readSB(numBits);
-                                x = cx + s.readSB(numBits);
-                                y = cy + s.readSB(numBits);
-                                commands.push('Q', cx, -cy, x, -y);
+                                var isVertical = s.readBool();
+                                if(isVertical){
+                                    y += s.readSB(numBits);
+                                    cmds.push('V' + y);
+                                }else{
+                                    x += s.readSB(numBits);
+                                    cmds.push('H' + x);
+                                }
                             }
                         }else{
-                            var flags = s.readUB(5);
-                            if(flags){
-                                if(flags & c.MOVE_TO){
-                                    var numBits = s.readUB(5);
-                                      x = s.readSB(numBits);
-                                    y = s.readSB(numBits);
-                                    commands.push('M', x, -y);
-                                    }
-                                  if(flags & c.LEFT_FILL_STYLE || flags & c.RIGHT_FILL_STYLE){ s.readUB(numFillBits); }
-                            }
+                            var cx = x + s.readSB(numBits),
+                                cy = y + s.readSB(numBits);
+                            x = cx + s.readSB(numBits);
+                            y = cy + s.readSB(numBits);
+                            cmds.push('Q' + cx + ',' + cy + ',' + x + ',' + y);
                         }
-                    }while(type || flags);
-                    s.align();
-                    glyphs.push({commands: commands.join(' ')});
-                }
-                var font = {
-                    type: "font",
-                    id: "f_" + id,
-                    glyphs: glyphs
-                };
-                this.ondata(font);
-                dictionary[id] = font;
-                return this;
+                    }else{
+                        var flags = s.readUB(5);
+                        if(flags){
+                            if(flags & c.MOVE_TO){
+                                var numBits = s.readUB(5);
+                                x = s.readSB(numBits);
+                                y = s.readSB(numBits);
+                                cmds.push('M' + x + ',' + y);
+                            }
+                            if(flags & c.LEFT_FILL_STYLE || flags & c.RIGHT_FILL_STYLE){ s.readUB(numFillBits); }
+                        }
+                    }
+                }while(type || flags);
+                s.align();
+                return {commands: cmds.join('')};
             },
             
-            _handleDefineText: function(){
+            _handleDefineText: function(s, offset, length, frm, withAlpha){
                 var id = s.readUI16(),
+                    strings = [],
                     txt = {
                         type: "text",
-                        id: "t_" + id,
+                        id: id,
                         bounds: s.readRect(),
                         matrix: s.readMatrix(),
-                        strings: []
+                        strings: strings
                     },
                     numGlyphBits = s.readUI8(),
                     numAdvBits = s.readUI8(),
-                    fontId = fill = null,
-                    x = y = size = 0,
+                    fontId = null,
+                    fill = null,
+                    x = 0,
+                    y = 0,
+                    size = 0,
                     str = null,
-                    strings = txt.strings;
+                    d = this._dictionary;
                 do{
                     var hdr = s.readUB(8);
                     if(hdr){
@@ -608,128 +594,284 @@
                             if(flags){
                                 var f = Gordon.textStyleFlags;
                                 if(flags & f.HAS_FONT){ fontId = s.readUI16(); }
-                                if(flags & f.HAS_COLOR){ fill = s.readRGB(); }
+                                if(flags & f.HAS_COLOR){ fill = withAlpha ? s.readRGBA() : s.readRGB(); }
                                 if(flags & f.HAS_XOFFSET){ x = s.readSI16(); }
                                 if(flags & f.HAS_YOFFSET){ y = s.readSI16(); }
                                 if(flags & f.HAS_FONT){ size = s.readUI16(); }
                             }
                             str = {
-                                font: dictionary[fontId].id,
+                                font: d[fontId].id,
                                 fill: fill,
                                 x: x,
                                 y: y,
-                                size: size
+                                size: size,
+                                entries: []
                             };
                             strings.push(str);
                         }else{
                             var numGlyphs = hdr & 0x7f,
-                                entries = str.entries = [],
-                                i = numGlyphs;
-                            while(i--){
-                                var entry = {};
-                                entry.index = s.readUB(numGlyphBits);
-                                entry.advance = s.readSB(numAdvBits);
-                                entries.push(entry);
+                                entries = str.entries;
+                            while(numGlyphs--){
+                                var idx = s.readUB(numGlyphBits),
+                                    adv = s.readSB(numAdvBits);
+                                entries.push({
+                                    index: idx,
+                                    advance: adv
+                                });
+                                x += adv;
                             }
                             s.align();
                         }
                     }
                 }while(hdr);
                 this.ondata(txt);
-                dictionary[id] = txt;
+                d[id] = txt;
                 return this;
             },
             
-            _handleDoAction: function(){
-                currFrame.action = this._readAction();
+            _handleDoAction: function(s, offset, len, frm){
+                frm.action = this._readAction(s, offset, len);
                 return this;
             },
             
-            _handleDefineFontInfo: function(){
-                var fontId = s.readUI16(),
-                    font = dictionary[fontId],
+            _handleDefineFontInfo: function(s, offset, len){
+                var d = this._dictionary,
+                    fontId = s.readUI16(),
+                    font = d[fontId],
+                    codes = [],
                     f = font.info = {
                         name: s.readString(s.readUI8()),
                         isSmall: s.readBool(3),
-                        isShiftJis: s.readBool(),
-                        isAnsi: s.readBool(),
+                        isShiftJIS: s.readBool(),
+                        isANSI: s.readBool(),
                         isItalic: s.readBool(),
                         isBold: s.readBool(),
-                        codes: []
+                        codes: codes
                     },
-                    useWideCodes = s.readBool(),
-                    codes = f.codes,
+                    u = f.isUTF8 = s.readBool(),
                     i = font.glyphs.length;
-                while(i--){
-                    var code = useWideCodes ? s.readUI16() : s.readUI8();
-                    codes.push(code);
-                }
+                while(i--){ codes.push(u ? s.readUI16() : s.readUI8()); }
                 this.ondata(font);
-                dictionary[fontId] = font;
+                d[fontId] = font;
                 return this;
             },
             
-            _handleDefineBitsJpeg2: function(offset, len){
-                return this._handleDefineBits(offset, len, true);
-            },
-            
-            _handleDefineBitsLossless: function(offset, len){
+            _handleDefineBitsLossless: function(s, offset, len, frm, withAlpha){
                 var id = s.readUI16(),
                     format = s.readUI8(),
-                    width = s.readUI16(),
-                    height = s.readUI16(),
-                    b = Gordon.bitmapFormats;
-                if(format == b.COLORMAPPED){ var colorTableSize = s.readUI8(); }
-                s.seek(2);
-                var d = zip_inflate(s.readString(len - (s.offset - offset)));
-                switch(format){
-                    case b.COLORMAPPED:
-                        var colorTable = [];
-                        for(var i = 0; i <= colorTableSize; i++){ colorTable.push(d.substr(i * 3, 3)); }
-                        var data = [];
-                        for(var i = 0; i < width * height; i++){ data.push(d[i]); }
-                    case b.RGB15:
-                    case b.RGB24:
-                        var data = [];
-                        for(var i = 0; d[i]; i++){ data.push(d[++i], d[++i], d[++i]); }
-                        break;
-                }
-                var img = {
-                    type: "image",
-                    id: "i_" + id,
-                    data: data.join(''),
-                    width: width,
-                    height: height
-                }
+                    img = {
+                        type: "image",
+                        id: id,
+                        width: s.readUI16(),
+                        height: s.readUI16(),
+                        withAlpha: withAlpha
+                    };
+                if(format == Gordon.bitmapFormats.COLORMAPPED){ img.colorTableSize = s.readUI8() + 1; }
+                img.colorData = s.readString(len - (s.offset - offset));
                 this.ondata(img);
-                dictionary[id] = img;
+                this._dictionary[id] = img;
                 return this;
             },
             
-            _handleDefineShape2: function(){
-                return this._handleDefineShape.apply(this, arguments);
+            _handleDefineBitsJpeg2: function(s, offset, len){
+                return this._handleDefineBits(s, offset, len);
             },
             
-            _handleDefineButtonCxform: function(){
-                var buttonId = s.readUI16(),
-                    filterId = "x_" + (++currPrivateId);
-                this.ondata({
-                    id: filterId,
-                    type: "filter",
-                    cxform: s.readCxform()
-                });
-                var button = dictionary[buttonId];
-                button.filter = filterId;
-                this.ondata(button);
-                dictionary[buttonId] = button;
-                return this;
+            _handleDefineShape2: function(s, offset, len){
+                return this._handleDefineShape(s, offset, len);
             },
             
-            _handleProtect: function(offset, len){
+            _handleDefineButtonCxform: function(s){
+                var t = this,
+                    d = t._dictionary,
+                    buttonId = s.readUI16(),
+                    button = d[buttonId];
+                button.cxform = s.readCxform();
+                t.ondata(button);
+                d[buttonId] = button;
+                return t;
+            },
+            
+            _handleProtect: function(s, offset, len){
                 s.seek(len);
+                return this;
+            },
+            
+            _handlePlaceObject2: function(s, offset, len, frm){
+                var flags = s.readUI8(),
+                    depth = s.readUI16(),
+                    f = Gordon.placeFlags,
+                    character = {depth: depth},
+                    t = this;
+                if(flags & f.HAS_CHARACTER){
+                    var objId = s.readUI16();
+                    character.object = t._dictionary[objId].id;
+                }
+                if(flags & f.HAS_MATRIX){ character.matrix = s.readMatrix(); }
+                if(flags & f.HAS_CXFORM){ character.cxform = s.readCxformA(); }
+                if(flags & f.HAS_RATIO){ character.ratio = s.readUI16(); }
+                if(flags & f.HAS_NAME){ character.name = s.readString(); }
+                if(flags & f.HAS_CLIP_DEPTH){ character.clipDepth = s.readUI16(); }
+                if(flags & f.HAS_CLIP_ACTIONS){ s.seek(len - (s.offset - offset)) }
+                frm.displayList[depth] = character;
+                return t;
+            },
+            
+            _handleRemoveObject2: function(s, offset, len, frm){
+                var depth = s.readUI16();
+                frm.displayList[depth] = null;
+                return this;
+            },
+            
+            _handleDefineShape3: function(s, offset, len, frm){
+                return this._handleDefineShape(s, offset, len, frm, true);
+            },
+            
+            _handleDefineText2: function(s, offset, len, frm){
+                return this._handleDefineText(s, offset, len, frm, true);
+            },
+            
+            _handleDefineButton2: function(s, offset, len, frm){
+                return t._handleDefineButton(s, offset, len, frm, true);
+            },
+            
+            _handleDefineBitsJpeg3: function(s, offset, len, frm){
+                return this._handleDefineBits(s, offset, len, frm, true);
+            },
+            
+            _handleDefineBitsLossless2: function(s, offset, len, frm){
+                return this._handleDefineBitsLossless(s, offset, len, frm, true);
+            },
+            
+            _handleDefineSprite: function(s, offset, len){
+                var id = s.readUI16(),
+                    frameCount = s.readUI16(),
+                    h = Gordon.tagHandlers,
+                    f = Gordon.tagCodes.SHOW_FRAME,
+                    c = Gordon.controlTags,
+                    timeline = [],
+                    sprite = {
+                        id: id,
+                        timeline: timeline
+                    },
+                    t = this;
+                do{
+                    var frm = {
+                        type: "frame",
+                        displayList: {}
+                    };
+                    do{
+                        var hdr = s.readUI16(),
+                            code = hdr >> 6,
+                            len = hdr & 0x3f,
+                            handl = h[code];
+                        if(0x3f == len){ len = s.readUI32(); }
+                        var offset = s.offset;
+                        if(code){
+                            if(code == f){
+                                timeline.push(c);
+                                break;
+                            }
+                            if(c[code] && t[handl]){ t[handl](s, offset, len, frm); }
+                            else{ s.seek(len); }
+                        }
+                    }while(code);
+                }while(code);
+                t.ondata(sprite);
+                t._dictionary[id] = sprite;
+                return t;
+            },
+            
+            _handleFrameLabel: function(s, offset, len, frm){
+                frm.label = s.readString();
+                return this;
+            },
+            
+            _handleDefineMorphShape: function(s, offset, len){
+                var id = s.readUI16(),
+                    startBounds = s.readRect(),
+                    endBounds = s.readRect(),
+                    endEdgesOffset = s.readUI32(),
+                    t = this,
+                    fillStyles = t._readFillStyles(s, true, true),
+                    lineStyles = t._readLineStyles(s, true, true),
+                    morph = {
+                        type: "morph",
+                        id: id,
+                        startEdges: t._readEdges(s, fillStyles, lineStyles, true, true),
+                        endEdges: t._readEdges(s, fillStyles, lineStyles, true, true)
+                    };
+                t.ondata(morph);
+                t._dictionary[id] = morph;
+                return t;
+            },
+            
+            _handleDefineFont2: function(s, offset, len){
+                var id = s.readUI16(),
+                    hasLayout = s.readBool(),
+                    glyphs = [],
+                    font = {
+                        type: "font",
+                        id: id,
+                        glyphs: glyphs
+                    },
+                    codes = [],
+                    f = font.info = {
+                        isShiftJIS: s.readBool(),
+                        isSmall: s.readBool(),
+                        isANSI: s.readBool(),
+                        useWideOffsets: s.readBool(),
+                        isUTF8: s.readBool(),
+                        isItalic: s.readBool(),
+                        isBold: s.readBool(),
+                        languageCode: s.readLanguageCode(),
+                        name: s.readString(s.readUI8()),
+                        codes: codes
+                    },
+                    i = numGlyphs = s.readUI16(),
+                    w = f.useWideOffsets,
+                    offsets = [],
+                    tablesOffset = s.offset,
+                    u = f.isUTF8;
+                while(i--){ offsets.push(w ? s.readUI32() : s.readUI16()); }
+                s.seek(w ? 4 : 2);
+                for(var i = 0, o = offsets[0]; o; o = offsets[++i]){
+                    s.seek(tablesOffset + o, true);
+                    glyphs.push(this._readGlyph(s));
+                }
+                var i = numGlyphs;
+                while(i--){ codes.push(u ? s.readUI16() : s.readUI8()); };
+                if(hasLayout){
+                    f.ascent = s.readUI16();
+                    f.descent = s.readUI16();
+                    f.leading = s.readUI16();
+                    var advanceTable = f.advanceTable = [],
+                        boundsTable = f.boundsTable = [],
+                        kerningTable = f.kerningTable = [];
+                    i = numGlyphs;
+                    while(i--){ advanceTable.push(s.readUI16()); };
+                    i = numGlyphs;
+                    while(i--){ boundsTable.push(s.readRect()); };
+                    var kerningCount = s.readUI16();
+                    while(kerningCount--){ kerningTable.push({
+                        code1: u ? s.readUI16() : s.readUI8(),
+                        code2: u ? s.readUI16() : s.readUI8(),
+                        adjustment: s.readUI16()
+                    }); }
+                }
+                this.ondata(font);
+                this._dictionary[id] = font;
                 return this;
             }
         };
+        
+        function nlizeMatrix(matrix){
+            return {
+                scaleX: matrix.scaleX * 20, scaleY: matrix.scaleY * 20,
+                skewX: matrix.skewX * 20, skewY: matrix.skewY * 20,
+                moveX: matrix.moveX, moveY: matrix.moveY
+            };
+        }
         
         function cloneEdge(edge){
             return {
@@ -741,62 +883,35 @@
             };
         }
         
-        function buildShape(edges, fill, stroke){
-            var x1 = y1 = x2 = y2 = 0,
+        function edges2cmds(edges, stroke){
+            var firstEdge = edges[0],
+                x1 = 0,
+                y1 = 0,
+                x2 = 0,
+                y2 = 0,
                 cmds = [];
-            edges.forEach(function(edge, i){
+            for(var i = 0, edge = firstEdge; edge; edge = edges[++i]){
                 x1 = edge.x1;
                 y1 = edge.y1;
-                if(x1 != x2 || y1 != y2 || !i){ cmds.push('M', x1, y1); }
+                if(x1 != x2 || y1 != y2 || !i){ cmds.push('M' + x1 + ',' + y1); }
                 x2 = edge.x2;
                 y2 = edge.y2;
                 if(null == edge.cx || null == edge.cy){
-                    if(x2 == x1){ cmds.push('V', y2); }
-                    else if(y2 == y1){ cmds.push('H', x2); }
-                    else{ cmds.push('L', x2,  y2); }
-                }else{ cmds.push('Q', edge.cx, edge.cy, x2, y2); }
-            });
-            return {
-                type: "shape",
-                commands: cmds.join(' '),
-                fill: fill,
-                stroke: stroke
+                    if(x2 == x1){ cmds.push('V' + y2); }
+                    else if(y2 == y1){ cmds.push('H' + x2); }
+                    else{ cmds.push('L' + x2 + ',' + y2); }
+                }else{ cmds.push('Q' + edge.cx + ',' + edge.cy + ',' + x2 + ',' + y2); }
             };
+            if(!stroke && (x2 != firstEdge.x1 || y2 != firstEdge.y1)){ cmds.push('L' + firstEdge.x1 + ',' + firstEdge.y1) }
+            return cmds.join('');
         }
         
         function calcPtKey(x, y){
             return (x + 50000) * 100000 + y;
         }
         
-        var B64_DIGITS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        
-        function encodeBase64(data, callback, n){
-            var byteNum = 0,
-                bits = prevBits = null;
-            chars = [];
-            for(var i = 0; data[i]; i++){
-                byteNum = i % 3;
-                bits = data.charCodeAt(i) & 0xff;
-                switch(byteNum){
-                    case 0:
-                        chars.push(B64_DIGITS[bits >> 2]);
-                        break;
-                    case 1:
-                        chars.push(B64_DIGITS[((prevBits & 3) << 4) | (bits >> 4)]);
-                        break;
-                    case 2:
-                        chars.push(B64_DIGITS[((prevBits & 0x0f) << 2) | (bits >> 6)], B64_DIGITS[bits & 0x3f]);
-                        break;
-                }
-                prevBits = bits;
-            }
-            if(!byteNum){ chars.push(B64_DIGITS[(prevBits & 3) << 4], "=="); }
-            else if (byteNum == 1){ chars.push(B64_DIGITS[(prevBits & 0x0f) << 2], '='); }
-            return chars.join('');
-        }
-        
-        global.onmessage = function(e){
+        win.onmessage = function(e){
             new Gordon.Parser(e.data);
         };
     }
-}());
+})();

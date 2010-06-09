@@ -5,4 +5,4 @@
  *    Gordon is freely distributable under the terms of the MIT license.
  */
 
-(function(global){
+(function(window, undefined){

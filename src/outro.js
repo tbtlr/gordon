@@ -1,2 +1,2 @@
-    global.Gordon = Gordon;
-}(self));
+    win.Gordon = Gordon;
+})(self);

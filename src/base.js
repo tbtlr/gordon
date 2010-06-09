@@ -1,4 +1,9 @@
-var Gordon = {
+var win = window,
+    doc = win.document,
+    push = Array.prototype.push,
+
+Gordon = {
+    debug: false,
     qualityValues: {
         LOW: "low",
         AUTO_LOW: "autolow",
@@ -14,7 +19,7 @@ var Gordon = {
     },
     validSignatures: {
         SWF: "FWS",
-        COMPRESSED_SWF: "CWS" 
+        COMPRESSED_SWF: "CWS"
     },
     readyStates: {
         LOADING: 0,
@@ -89,6 +94,7 @@ var Gordon = {
         DEFINE_BITS_JPEG4: 90,
         DEFINE_FONT4: 91
     },
+    controlTags: [0, 1, 4, 5, 15, 18, 19, 26, 28, 43, 45],
     tagNames: {},
     tagHandlers: {},
     fillStyleTypes: {
@@ -135,17 +141,120 @@ var Gordon = {
         HAS_YOFFSET: 0x02
     },
     actionCodes: {
-        PLAY: 0x06,
-        STOP: 0x07,
         NEXT_FRAME: 0x04,
         PREVIOUS_FRAME: 0x05,
-        GOTO_FRAME: 0x81,
-        GOTO_LABEL: 0x08c,
-        WAIT_FOR_FRAME: 0x8a,
-        GET_URL: 0x83,
-        STOP_SOUNDS: 0x09,
+        PLAY: 0x06,
+        STOP: 0x07,
         TOGGLE_QUALITY: 0x08,
-        SET_TARGET: 0x08b
+        STOP_SOUNDS: 0x09,
+        ADD: 0x0a,
+        SUBTRACT: 0x0b,
+        MULTIPLY: 0x0c,
+        DIVIDE: 0x0d,
+        EQUALS: 0x0e,
+        LESS: 0x0f,
+        AND: 0x10,
+        OR: 0x11,
+        NOT: 0x12,
+        STRING_EQUALS: 0x13,
+        STRING_LENGTH: 0x14,
+        STRING_EXTRACT: 0x15,
+        POP: 0x17,
+        TO_INTEGER: 0x18,
+        GET_VARIABLE: 0x1c,
+        SET_VARIABLE: 0x1d,
+        SET_TARGET2: 0x20,
+        STRING_ADD: 0x21,
+        GET_PROPERTY: 0x22,
+        SET_PROPERTY: 0x23,
+        CLONE_SPRITE: 0x24,
+        REMOVE_SPRITE: 0x25,
+        TRACE: 0x26,
+        START_DRAG: 0x27,
+        END_DRAG: 0x28,
+        STRING_LESS: 0x29,
+        THROW: 0x2a,
+        CAST_OP: 0x2b,
+        IMPLEMENTS_OP: 0x2c,
+        FS_COMMAND2: 0x2d,
+        RANDOM_NUMBER: 0x30,
+        MBSTRING_LENGTH: 0x31,
+        CHAR_TO_ASCII: 0x32,
+        ASCII_TO_CHAR: 0x33,
+        GET_TIME: 0x34,
+        MBSTRING_EXTRACT: 0x35,
+        MBCHAR_TO_ASCII: 0x36,
+        MBASCII_TO_CHAR: 0x37,
+        DELETE: 0x3a,
+        DELETE2: 0x3b,
+        DEFINE_LOCAL: 0x3c,
+        CALL_FUNCTION: 0x3d,
+        RETURN: 0x3e,
+        MODULO: 0x3f,
+        NEW_OBJECT: 0x40,
+        DEFINE_LOCAL2: 0x41,
+        INIT_ARRAY: 0x42,
+        INIT_OBJECT: 0x43,
+        TYPE_OF: 0x44,
+        TARGET_PATH: 0x45,
+        ENUMERATE: 0x46,
+        ADD2: 0x47,
+        LESS2: 0x48,
+        EQUALS2: 0x49,
+        TO_NUMBER: 0x4a,
+        TO_STRING: 0x4b,
+        PUSH_DUPLICATE: 0x4c,
+        STACK_SWAP: 0x4d,
+        GET_MEMBER: 0x4e,
+        SET_MEMBER: 0x4f,
+        INCREMENT: 0x50,
+        DECREMENT: 0x51,
+        CALL_METHOD: 0x52,
+        NEW_METHOD: 0x53,
+        INSTANCE_OF: 0x54,
+        ENUMERATE2: 0x55,
+        DO_INIT_ACTION: 0x59,
+        BIT_AND: 0x60,
+        BIT_OR: 0x61,
+        BIT_XOR: 0x62,
+        BIT_LSHIFT: 0x63,
+        BIT_RSHIFT: 0x64,
+        BIT_URSHIFT: 0x65,
+        STRICT_EQUALS: 0x66,
+        GREATER: 0x67,
+        STRING_GREATER: 0x68,
+        EXTENDS: 0x69,
+        GOTO_FRAME: 0x81,
+        DO_ABC: 0x82,
+        GET_URL: 0x83,
+        STORE_REGISTER: 0x87,
+        CONSTANT_POOL: 0x88,
+        WAIT_FOR_FRAME: 0x8a,
+        SET_TARGET: 0x8b,
+        SET_GO_TO_LABEL: 0x8c,
+        WAIT_FOR_FRAME2: 0x8d,
+        DEFINE_FUNCTION2: 0x8e,
+        TRY: 0x8f,
+        WITH: 0x94,
+        PUSH: 0x96,
+        JUMP: 0x99,
+        GET_URL2: 0x9a,
+        DEFINE_FUNCTION: 0x9b,
+        IF: 0x9d,
+        CALL: 0x9e,
+        GOTO_FRAME2: 0x9f
+    },
+    valueTypes: {
+        STRING: 0,
+        FLOATING_POINT: 1,
+        NULL: 2,
+        UNDEFINED: 3,
+        REGISTER: 4,
+        BOOLEAN: 5,
+        DOUBLE: 6,
+        INTEGER: 7,
+        CONSTANT8: 8,
+        SWIFF_CONSTANT16: 9
     },
     urlTargets: {
         SELF: "_self",
@@ -157,7 +266,18 @@ var Gordon = {
         COLORMAPPED: 3,
         RGB15: 4,
         RGB24: 5
-    }
+    },
+    placeFlags: {
+        MOVE: 0x01,
+        HAS_CHARACTER: 0x02,
+        HAS_MATRIX: 0x04,
+        HAS_CXFORM: 0x08,
+        HAS_RATIO: 0x10,
+        HAS_NAME: 0x20,
+        HAS_CLIP_DEPTH: 0x40,
+        HAS_CLIP_ACTIONS: 0x80
+    },
+    defaultRenderer: null
 };
 
 (function(){
@@ -171,7 +291,12 @@ var Gordon = {
             return p2.toUpperCase();
         });
     }
-}());
+})();
 
-var doc = global.document,
-    push = Array.prototype.push;
+var console = window.console || {
+    log: function(){}
+}
+
+function trace(){
+    if(Gordon.debug){ console.log.apply(console, arguments); }
+}
