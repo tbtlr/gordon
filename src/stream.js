@@ -1,38 +1,40 @@
 (function(){
+    var DEFLATE_CODE_LENGTH_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15],
+        DEFLATE_CODE_LENGHT_MAP = [
+            [0, 3], [0, 4], [0, 5], [0, 6], [0, 7], [0, 8], [0, 9], [0, 10], [1, 11], [1, 13], [1, 15], [1, 17],
+            [2, 19], [2, 23], [2, 27], [2, 31], [3, 35], [3, 43], [3, 51], [3, 59], [4, 67], [4, 83], [4, 99],
+            [4, 115], [5, 131], [5, 163], [5, 195], [5, 227], [0, 258]
+        ],
+        DEFLATE_DISTANCE_MAP = [
+            [0, 1], [0, 2], [0, 3], [0, 4], [1, 5], [1, 7], [2, 9], [2, 13], [3, 17], [3, 25], [4, 33], [4, 49],
+            [5, 65], [5, 97], [6, 129], [6, 193], [7, 257], [7, 385], [8, 513], [8, 769], [9, 1025], [9, 1537],
+            [10, 2049], [10, 3073], [11, 4097], [11, 6145], [12, 8193], [12, 12289], [13, 16385], [13, 24577]
+        ];
+    
     Gordon.Stream = function(data){
-        var t = this;
+        var buff = [],
+            t = this,
+            i = t.length = data.length;
         t.offset = 0;
-        t._buffer = data;
-        t._length = t._buffer.length;
+        for(var i = 0; data[i]; i++){ buff.push(String.fromCharCode(data.charCodeAt(i) & 0xff)); }
+        t._buffer = buff.join('');
         t._bitBuffer = null;
         t._bitOffset = 8;
     };
     Gordon.Stream.prototype = {
-        decompress: function() {
-            var t = this;
-            t.offset += 2;
-            var hdr = t._buffer.substr(0, t.offset),
-                d = t._buffer.substr(t.offset),
-                data = zip_inflate(d);
-            t._buffer = hdr + data;
-            t._length = t._buffer.length;
-            return t;
-        },
-        
         readByteAt: function(pos){
-            return this._buffer.charCodeAt(pos) & 0xff;
+            return this._buffer.charCodeAt(pos);
         },
         
         readNumber: function(numBytes, bigEnd){
             var t = this,
                 val = 0;
             if(bigEnd){
-                var i = numBytes;
-                while(i--){ val = (val << 8) + t.readByteAt(t.offset++); }
+                while(numBytes--){ val = (val << 8) | t.readByteAt(t.offset++); }
             }else{
                 var o = t.offset,
                     i = o + numBytes;
-                while(i > o){ val = (val << 8) + t.readByteAt(--i); }
+                while(i > o){ val = (val << 8) | t.readByteAt(--i); }
                 t.offset += numBytes;
             }
             t.align();
@@ -90,46 +92,47 @@
             return this._readFloatingPoint(8, 23);
         },
         
-        _readFloatingPoint: function(numEbits, numSbits){
-            var numBits = 1 + numEbits + numSbits,
+        _readFloatingPoint: function(numEBits, numSBits){
+            var numBits = 1 + numEBits + numSBits,
                 numBytes = numBits / 8,
                 t = this,
                 val = 0.0;
             if(numBytes > 4){
-                var buff = '',
-                    i = Math.ceil(numBytes / 4);
+                var i = Math.ceil(numBytes / 4);
                 while(i--){
-                    var o = t.offset,
+                    var buff = [],
+                        o = t.offset,
                         j = o + (numBytes >= 4 ? 4 : numBytes % 4);
                     while(j > o){
-                        buff += String.fromCharCode(t.readByteAt(--j));
+                        buff.push(t.readByteAt(--j));
                         numBytes--;
                         t.offset++;
                     }
                 }
-                var s = new Gordon.Stream(buff),
+                var s = new Gordon.Stream(String.fromCharCode.apply(String, buff)),
                     sign = s.readUB(1),
-                    expo = s.readUB(numEbits),
-                    mantis = 0;
-                for(var d = numSbits; d >= 0; d--){
-                    if(s.readBool()){ mantis += Math.pow(2, d - 1); }
+                    expo = s.readUB(numEBits),
+                    mantis = 0,
+                    i = numSBits;
+                while(i--){
+                    if(s.readBool()){ mantis += Math.pow(2, i); }
                 }
             }else{
                 var sign = t.readUB(1),
-                    expo = t.readUB(numEbits),
-                    mantis = t.readUB(numSbits);
+                    expo = t.readUB(numEBits),
+                    mantis = t.readUB(numSBits);
             }
             if(sign || expo || mantis){
-                var maxExpo = Math.pow(2, numEbits),
+                var maxExpo = Math.pow(2, numEBits),
                     bias = ~~((maxExpo - 1) / 2),
-                    scale = Math.pow(2, numSbits),
+                    scale = Math.pow(2, numSBits),
                     fract = mantis / scale;
                 if(bias){
                     if(bias < maxExpo){ val = Math.pow(2, expo - bias) * (1 + fract); }
                     else if(fract){ val = NaN; }
                     else{ val = Infinity; }
                 }else if(fract){ val = Math.pow(2, 1 - bias) * fract; }
-                if(val != NaN && sign){ val *= -1; }
+                if(NaN != val && sign){ val *= -1; }
             }
             return val;
         },
@@ -143,11 +146,10 @@
         },
         
         readEncodedU32: function(){
-            var val = 0,
-                i = 5;
-            while(i--){
-                var num = this.readByteAt(this.offset++);
-                val = (val << 7) + (num & 0x7f);
+            var val = 0;
+            for(var i = 0; i < 5; i++){
+                var num = this.readByteAt(this._offset++);
+                val = val | ((num & 0x7f) << (7 * i));
                 if(!(num & 0x80)){ break; }
             }
             return val;
@@ -159,17 +161,16 @@
             return val;
         },
         
-        readUB: function(numBits){
+        readUB: function(numBits, lsb){
             var t = this,
-                val = 0,
-                i = numBits;
-            while(i--){
+                val = 0;
+            for(var i = 0; i < numBits; i++){
                 if(8 == t._bitOffset){
                     t._bitBuffer = t.readUI8();
                     t._bitOffset = 0;
                 }
-                val = (val << 1) + (t._bitBuffer & (0x80 >> t._bitOffset) ? 1 : 0);
-                t._bitOffset++;
+                if(lsb){ val |= (t._bitBuffer & (0x01 << t._bitOffset++) ? 1 : 0) << i; }
+                else{ val = (val << 1) | (t._bitBuffer & (0x80 >> t._bitOffset++) ? 1 : 0); }
             }
             return val;
         },
@@ -185,9 +186,8 @@
                 var str = b.substr(t.offset, numChars);
                 t.offset += numChars;
             }else{
-                numChars = t._length - t.offset;
                 var chars = [],
-                    i = numChars;
+                    i = t.length - t.offset;
                 while(i--){
                     var code = t.readByteAt(t.offset++);
                     if(code){ chars.push(String.fromCharCode(code)); }
@@ -200,6 +200,19 @@
         
         readBool: function(numBits){
             return !!this.readUB(numBits || 1);
+        },
+        
+        seek: function(offset, absolute){
+            var t = this;
+            t.offset = (absolute ? 0 : t.offset) + offset;
+            t.align();
+            return t;
+        },
+        
+        align: function(){
+            this._bitBuffer = null;
+            this._bitOffset = 8;
+            return this;
         },
         
         readLanguageCode: function(){
@@ -297,15 +310,125 @@
             return cxform;
         },
         
-        seek: function(offset, absolute){
-            this.offset = (absolute ? 0 : this.offset) + offset;
-            return this;
+        uncompress: function(){
+            var t = this,
+                b = t._buffer,
+                o = t.offset,
+                data = b.substr(0, o) + t.unzip();
+            t.length = data.length;
+            t.offset = o;
+            t._buffer = data;
+            return t;
         },
         
-        align: function(){
-            this._bitBuffer = null;
-            this._bitOffset = 8;
-            return this;
+        unzip: function(raw){
+            var t = this,
+                buff = [],
+                o = DEFLATE_CODE_LENGTH_ORDER,
+                m = DEFLATE_CODE_LENGHT_MAP,
+                d = DEFLATE_DISTANCE_MAP;
+            t.seek(2);
+            do{
+                var isFinal = t.readUB(1, true),
+                    type = t.readUB(2, true),
+                    numLitLengths = t.readUB(5, true) + 257,
+                    numDistLengths = t.readUB(5, true) + 1,
+                    numCodeLenghts = t.readUB(4, true) + 4,
+                    codeLengths = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+                if(type){
+                    for(var i = 0; i < numCodeLenghts; i++){ codeLengths[o[i]] = t.readUB(3, true); }
+                    var codeTable = buildHuffTable(codeLengths),
+                        litLengths = [],
+                        prevCodeLen = 0,
+                        maxLengths = numLitLengths + numDistLengths;
+                    while(litLengths.length < maxLengths){
+                        var sym = decodeSymbol(t, codeTable);
+                        switch(sym){
+                            case 16:
+                                var i = t.readUB(2, true) + 3;
+                                while(i--){ litLengths.push(prevCodeLen); }
+                                break;
+                            case 17:
+                                var i = t.readUB(3, true) + 3;
+                                while(i--){ litLengths.push(0); }
+                                break;
+                            case 18:
+                                var i = t.readUB(7, true) + 11;
+                                while(i--){ litLengths.push(0); }
+                                break;
+                            default:
+                                if(sym <= 15){
+                                    litLengths.push(sym);
+                                    prevCodeLen = sym;
+                                }
+                        }
+                    }
+                    var distTable = buildHuffTable(litLengths.splice(numLitLengths, numDistLengths)),
+                        litTable = buildHuffTable(litLengths);
+                    do{
+                        var sym = decodeSymbol(t, litTable);
+                        if(sym < 256){ buff.push(raw ? sym : String.fromCharCode(sym)); }
+                        else if(sym > 256){
+                            var lengthMap = m[sym - 257],
+                                len = lengthMap[1] + t.readUB(lengthMap[0], true),
+                                distMap = d[decodeSymbol(t, distTable)],
+                                dist = distMap[1] + t.readUB(distMap[0], true),
+                                i = buff.length - dist;
+                            while(len--){ buff.push(buff[i++]); }
+                        }
+                    }while(256 != sym);
+                }else{
+                    t.align();
+                    var len = t.readUI16(),
+                        nlen = t.readUI16();
+                    if(raw){ while(len--){ buff.push(t.readUI8()); } }
+                    else{ buff.push(t.readString(len)); }
+                }
+            }while(!isFinal);
+            t.seek(4);
+            return raw ? buff : buff.join('');
         }
     };
-}());
+    
+    function buildHuffTable(bitLengths){
+        var numLengths = bitLengths.length,
+            blCount = [],
+            maxBits = Math.max.apply(Math, bitLengths),
+            nextCode = [],
+            code = 0,
+            table = {},
+            i = numLengths;
+        while(i--){
+            var len = bitLengths[i];
+            blCount[len] = (blCount[len] || 0) + (len > 0);
+        }
+        for(var i = 1; i <= maxBits; i++){
+            var len = i - 1;
+            if(undefined == blCount[len]){ blCount[len] = 0; }
+            code = (code + blCount[i - 1]) << 1;
+            nextCode[i] = code;
+        }
+        for(var i = 0; i < numLengths; i++){
+            var len = bitLengths[i];
+            if(len){
+                table[nextCode[len]] = {
+                    length: len,
+                    symbol: i
+                };
+                nextCode[len]++;
+            }
+        }
+        return table;
+    }
+    
+    function decodeSymbol(s, table) {
+        var code = 0,
+            len = 0;
+        while(true){
+            code = (code << 1) | s.readUB(1, true);
+            len++;
+            var entry = table[code];
+            if(entry != undefined && entry.length == len){ return entry.symbol }
+        }
+    }
+})();
