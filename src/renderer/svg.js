@@ -38,6 +38,7 @@
         t._dictionary = {};
         t._timeline = [];
         t._displayList = {};
+        t._nextFillId = 1;
         t._eventTarget = null;
     };
     Gordon.SvgRenderer.prototype = {
@@ -122,7 +123,7 @@
                 item = d[id],
                 type = obj.type,
                 node = null,
-                attrs = {id: 'o' + id};
+                attrs = {id: type[o] + '_' + id};
             if(!item || !item.node){
                 switch(type){
                     case "shape":
@@ -131,7 +132,7 @@
                             var node = t._createElement('g');
                             for(var i = 0, seg = segments[0]; seg; seg = segments[++i]){
                                 var segNode = node.appendChild(t._buildShape(seg));
-                                t._setAttributes(segNode, {id: 's' + seg.id})
+                                t._setAttributes(segNode, {id: 's' + id + '_' + (i + 1)})
                             }
                         }else{ var node = t._buildShape(obj); }
                         break;
@@ -200,13 +201,13 @@
                         break;
                     case "button":
                         var node = t._createElement('g'),
-                            hitArea = t._createElement('g'),
+                            hitNode = t._createElement('g'),
                             states = obj.states;
                         for(var state in states){
-                            var display = state == b.HIT ? hitArea : node.appendChild(t._createElement('g')),
+                            var stateNode = state == b.HIT ? hitNode : node.appendChild(t._createElement('g')),
                                 list = states[state],
                                 cxform = obj.cxform;
-                            t._setAttributes(display, {
+                            t._setAttributes(stateNode, {
                                 className: buttonStates[state],
                                 opacity: state == b.UP ? 1 : 0
                             });
@@ -215,10 +216,10 @@
                                     var character = cloneCharacter(list[depth]);
                                     character.cxform = cxform;
                                 }else{ var character = list[depth]; }
-                                display.appendChild(t._buildCharacter(character));
+                                stateNode.appendChild(t._buildCharacter(character));
                             }
                         }
-                        node.appendChild(hitArea);
+                        node.appendChild(hitNode);
                         break;
                     case "font":
                         var info = obj.info;
@@ -324,9 +325,7 @@
                 if(fill){
                     var type = fill.type;
                     if(fill.type){
-                        var fillNode = t._defs.appendChild(t._buildFill(fill)),
-                            fillId = type[0] + shape.id;
-                        t._setAttributes(fillNode, {id: fillId});
+                        var fillNode = t._defs.appendChild(t._buildFill(fill));
                         attrs.fill = "url(#" + fillId + ')';
                     }else{
                         attrs.fill = color2string(fill);
@@ -346,7 +345,7 @@
         _buildFill: function(fill){
             var type = fill.type,
                 t = this,
-                attrs = {};
+                attrs = {id: type[0] + '_' + (t._nextFillId++)};
             switch(type){
                 case "linear":
                 case "radial":
@@ -413,8 +412,8 @@
                         var cpNode = t._defs.appendChild(t._createElement("clipPath")),
                             useNode = cpNode.appendChild(t._createElement("use")),
                             matrix = character.matrix;
-                        t._setAttributes(useNode, {id: '#c' + character.object});
-                        t._setAttributes(useNode, {href: '#o' + character.object}, NS_XLINK);
+                        t._setAttributes(useNode, {id: 'c' + character.object});
+                        t._setAttributes(useNode, {href: '#s' + character.object}, NS_XLINK);
                         if(matrix){ t._setAttributes(useNode, {transform: matrix2string(matrix)}); }
                     }
                     var cxform = character.cxform;
@@ -490,19 +489,18 @@
                 switch(type){
                     case "button":
                         var node = item.node.cloneNode(true),
-                            displayMap = {},
+                            stateNodes = {},
                             currState = b.UP,
                             m = Gordon.mouseButtons,
-                            isMouseOver = false,
-                            hitArea = displayMap[b.HIT];
+                            isMouseOver = false;
+                        for(var s in buttonStates){ stateNodes[s] = node.getElementsByClassName(buttonStates[s])[0]; }
+                        var hitNode = stateNodes[b.HIT];
                         
                         function setState(state){
-                            t._setAttributes(displayMap[currState], {opacity: 0});
-                            t._setAttributes(displayMap[state], {opacity: 1});
+                            t._setAttributes(stateNodes[currState], {opacity: 0});
+                            t._setAttributes(stateNodes[state], {opacity: 1});
                             currState = state;
                         };
-                        
-                        for(var s in buttonStates){ displayMap[s] = node.getElementsByClassName(buttonStates[s])[0]; }
                         
                         function mouseupHandle(e){
                             if(!(buttonMask & m.LEFT)){
@@ -516,7 +514,7 @@
                             return false;
                         };
                         
-                        hitArea.onmouseover = function(e){
+                        hitNode.onmouseover = function(e){
                             isMouseOver = true;
                             if(!t.eventTarget){
                                 if(buttonMask & m.LEFT){ this.onmousedown(e); }
@@ -525,13 +523,13 @@
                             return false;
                         };
                         
-                        hitArea.onmouseout = function(e){
+                        hitNode.onmouseout = function(e){
                             isMouseOver = false;
                             if(!t.eventTarget){ setState(this == t.eventTarget ? b.OVER : b.UP); }
                             return false;
                         };
                         
-                        hitArea.onmousedown = function(e){
+                        hitNode.onmousedown = function(e){
                             if(buttonMask & m.LEFT){
                                 setState(b.DOWN);
                                 doc.addEventListener("mouseup", mouseupHandle, false);
@@ -540,7 +538,7 @@
                             return false;
                         };
                         
-                        hitArea.onmouseup = function(e){
+                        hitNode.onmouseup = function(e){
                             setState(b.OVER);
                             return false;
                         };

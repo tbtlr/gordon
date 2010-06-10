@@ -1,15 +1,17 @@
 (function(){
     if(false && doc && window.Worker){
-        var src = (function(){
-                var REGEXP_SCRIPT_SRC = /(^|.*\/)gordon.(min\.)?js$/,
-                    scripts = doc.getElementsByTagName("script"),
-                    i = scripts.length;
-                    while(i--){
-                        var path = scripts[i].src;
-                        if(REGEXP_SCRIPT_SRC.test(path)){ return path; }
-                    }
-                })(),
-                worker = new Worker(src);
+        var REGEXP_SCRIPT_SRC = /(^|.*\/)gordon.(min\.)?js$/,
+            scripts = doc.getElementsByTagName("script"),
+            src = '',
+            i = scripts.length;
+        while(i--){
+            var path = scripts[i].src;
+            if(REGEXP_SCRIPT_SRC.test(path)){
+                src = path;
+                break;
+            }
+        }
+        worker = new Worker(src);
         
         Gordon.Parser = function(data, ondata){
             var t = this,
@@ -95,7 +97,6 @@
                 if(edges instanceof Array){
                     var segments = shape.segments = [];
                     for(var i = 0, seg = edges[0]; seg; seg = edges[++i]){ segments.push({
-                        id: id + '_' + (i + 1),
                         commands: edges2cmds(seg.records, !!seg.line),
                         fill: seg.fill,
                         line: seg.line
