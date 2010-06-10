@@ -310,7 +310,7 @@
             return cxform;
         },
         
-        uncompress: function(){
+        decompress: function(){
             var t = this,
                 b = t._buffer,
                 o = t.offset,
