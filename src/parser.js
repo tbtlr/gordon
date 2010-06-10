@@ -41,7 +41,7 @@
                 fileLen = s.readUI32(),
                 h = Gordon.tagHandlers,
                 f = Gordon.tagCodes.SHOW_FRAME;
-            if(sign == v.COMPRESSED_SWF){ s.uncompress(); }
+            if(sign == v.COMPRESSED_SWF){ s.decompress(); }
             else if(sign != v.SWF){ throw new Error(url + " is not a SWF movie file"); }
             this.ondata({
                 type: "header",
