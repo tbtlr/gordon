@@ -68,6 +68,7 @@
                     if(lbl){ t._labeledFrameNums[lbl] = n; }
                     t.onprogress(~~((n * 100) / t.totalFrames));
                     if(1 == n){
+                        var stage = t._stage;
                         if(stage){
                             stage.appendChild(t._renderer.node);
                             t._changeReadyState(s.INTERACTIVE);
