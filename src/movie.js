@@ -49,14 +49,14 @@
                     t._renderer = new r(t.width, t.height, frmWidth, frmHeight, t.quality, t.scale, t.bgcolor);
                     t.totalFrames = t._frameCount;
                     if(id){
-                        var stage = doc.getElementById(id),
+                        var stage = t._stage = doc.getElementById(id),
                             bgcolor = t.bgcolor,
                             bgParts = [],
                             poster = t.poster;
                         stage.innerHTML = '';
                         if(t.bgcolor){ bgParts.push(bgcolor); }
                         if(poster){ bgParts.push(poster, "center center"); }
-                        stage.setAttribute("style", "background: " + bgParts.join(' '));
+                        if(bgParts.length){ stage.setAttribute("style", "background: " + bgParts.join(' ')); }
                     }
                     t._changeReadyState(s.LOADED);
                     break;
