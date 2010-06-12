@@ -330,12 +330,14 @@
                     }else{
                         attrs.fill = color2string(fill);
                         var alpha = fill.alpha;
-                        attrs.opacity = alpha == undefined ? 1 : alpha;
+                        if(undefined != alpha){ attrs.fill_opacity = alpha; }
                     }
                 }else{ attrs.fill = "none"; }
                 if(line){
-                    attrs.stroke = color2string(line.color);
-                    attrs.stroke_width = Math.max(line.width, 1);
+                    var color = line.color,
+                        alpha = color.alpha;
+                    attrs.stroke = color2string(color);
+                    if(undefined != alpha){ attrs.stroke_opacity = alpha; }
                 }
                 t._setAttributes(node, attrs);
             }
