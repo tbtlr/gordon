@@ -492,7 +492,8 @@
                             stateNodes = {},
                             currState = b.UP,
                             m = Gordon.mouseButtons,
-                            isMouseOver = false;
+                            isMouseOver = false,
+                            trackAsMenu = obj.trackAsMenu;
                         for(var s in buttonStates){ stateNodes[s] = node.getElementsByClassName(buttonStates[s])[0]; }
                         var hitNode = stateNodes[b.HIT];
                         
@@ -525,7 +526,7 @@
                         
                         hitNode.onmouseout = function(e){
                             isMouseOver = false;
-                            if(!t.eventTarget){ setState(this == t.eventTarget ? b.OVER : b.UP); }
+                            if(!t.eventTarget || trackAsMenu){ setState(b.UP); }
                             return false;
                         };
                         
