@@ -444,7 +444,7 @@
                 return t;
             },
             
-            _handleDefineButton: function(s, offset, len, frm, withActions){
+            _handleDefineButton: function(s, offset, len, frm, advanced){
                 var id = s.readUI16(),
                     t = this,
                     d = t._dictionary,
@@ -453,9 +453,9 @@
                         type: "button",
                         id: id,
                         states: states,
-                        trackAsMenu: withActions ? s.readBool(8) : false
+                        trackAsMenu: advanced ? s.readBool(8) : false
                     };
-                    if(withActions){ s.seek(2); }
+                    if(advanced){ s.seek(2); }
                 do{
                     var flags = s.readUI8();
                     if(flags){
@@ -467,6 +467,7 @@
                                 depth: depth,
                                 matrix: s.readMatrix()
                             };
+                            if(advanced){ character.cxform = s.readCxformA(); }
                         while(state <= 0x08){
                             if(flags & state){
                                 var list = states[state] || (states[state] = {});
