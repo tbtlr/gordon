@@ -123,7 +123,7 @@
                 item = d[id],
                 type = obj.type,
                 node = null,
-                attrs = {id: type[o] + '_' + id};
+                attrs = {id: type[0] + id};
             if(!item || !item.node){
                 switch(type){
                     case "shape":
@@ -546,7 +546,7 @@
                         break;
                     default:
                         var node = t._createElement("use");
-                        t._setAttributes(node, {href: "#o" + obj.id}, NS_XLINK);
+                        t._setAttributes(node, {href: "#" + type[0] + obj.id}, NS_XLINK);
                 }
             }
             return node;
