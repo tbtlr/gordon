@@ -229,12 +229,12 @@
         
         readRGBA: function(){
             var rgba = this.readRGB();
-            rgba.alpha = this.readUI8() / 256;
+            rgba.alpha = this.readUI8() / 255;
             return rgba;
         },
         
         readARGB: function(){
-            var alpha = this.readUI8() / 256,
+            var alpha = this.readUI8() / 255,
                 rgba = this.readRGB();
             rgba.alpha = alpha;
             return rgba;
@@ -300,7 +300,7 @@
                 var addR = t.readSB(numBits),
                     addG = t.readSB(numBits),
                     addB = t.readSB(numBits),
-                    addA = withAlpha ? t.readSB(numBits) : 0;
+                    addA = withAlpha ? t.readSB(numBits) / 256 : 0;
             }else{ var addR = addG = addB = addA = 0; }
             var cxform = {
                 multR: multR, multG: multG, multB: multB, multA: multA,
