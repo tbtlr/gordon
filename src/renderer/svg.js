@@ -29,16 +29,17 @@
         t._defs = n.appendChild(t._createElement("defs"));
         var s = t._stage = n.appendChild(t._createElement('g'));
         t._setAttributes(s, {
-            fill_rule: "evenodd",
-            stroke_linecap: "round",
-            stroke_linejoin: "round"
+            "fill-rule": "evenodd",
+            "stroke-linecap": "round",
+            "stroke-linejoin": "round"
         });
         t.setQuality(t.quality);
         if(bgcolor){ t.setBgcolor(bgcolor); }
         t._dictionary = {};
+        t._fills = {};
+        t._cast = {};
         t._timeline = [];
         t._displayList = {};
-        t._nextFillId = 1;
         t._eventTarget = null;
     };
     Gordon.SvgRenderer.prototype = {
@@ -48,10 +49,8 @@
         
         _setAttributes: function(node, attrs, ns){
             for(var name in attrs){
-                var val = attrs[name];
-                name = name == "className" ? "class" : name.replace(/_/g, '-');
-                if(ns){ node.setAttributeNS(ns, name, val); }
-                else{ node.setAttribute(name, val); }
+                if(ns){ node.setAttributeNS(ns, name, attrs[name]); }
+                else{ node.setAttribute(name, attrs[name]); }
             }
             return node;
         },
@@ -62,43 +61,43 @@
             switch(quality){
                 case q.LOW:
                     var attrs = {
-                        shape_rendering: "crispEdges",
-                        image_rendering: "optimizeSpeed",
-                        text_rendering: "optimizeSpeed",
-                        color_rendering: "optimizeSpeed"
+                        "shape-rendering": "crispEdges",
+                        "image-rendering": "optimizeSpeed",
+                        "text-rendering": "optimizeSpeed",
+                        "color-rendering": "optimizeSpeed"
                     }
                     break;
                 case q.AUTO_LOW:
                 case q.AUTO_HIGH:
                     var attrs = {
-                        shape_rendering: "auto",
-                        image_rendering: "auto",
-                        text_rendering: "auto",
-                        color_rendering: "auto"
+                        "shape-rendering": "auto",
+                        "image-rendering": "auto",
+                        "text-rendering": "auto",
+                        "color-rendering": "auto"
                     }
                     break;
                 case q.MEDIUM:
                     var attrs = {
-                        shape_rendering: "optimizeSpeed",
-                        image_rendering: "optimizeSpeed",
-                        text_rendering: "optimizeLegibility",
-                        color_rendering: "optimizeSpeed"
+                        "shape-rendering": "optimizeSpeed",
+                        "image-rendering": "optimizeSpeed",
+                        "text-rendering": "optimizeLegibility",
+                        "color-rendering": "optimizeSpeed"
                     }
                     break;
                 case q.HIGH:
                     var attrs = {
-                        shape_rendering: "geometricPrecision",
-                        image_rendering: "auto",
-                        text_rendering: "geometricPrecision",
-                        color_rendering: "optimizeQuality"
+                        "shape-rendering": "geometricPrecision",
+                        "image-rendering": "auto",
+                        "text-rendering": "geometricPrecision",
+                        "color-rendering": "optimizeQuality"
                     }
                     break;
                 case q.BEST:
                     var attrs = {
-                        shape_rendering: "geometricPrecision",
-                        image_rendering: "optimizeQuality",
-                        text_rendering: "geometricPrecision",
-                        color_rendering: "optimizeQuality"
+                        "shape-rendering": "geometricPrecision",
+                        "image-rendering": "optimizeQuality",
+                        "text-rendering": "geometricPrecision",
+                        "color-rendering": "optimizeQuality"
                     }
                     break;
             }
@@ -129,11 +128,13 @@
                     case "shape":
                         var segments = obj.segments;
                         if(segments){
-                            var node = t._createElement('g');
+                            var node = t._createElement('g'),
+                                frgmt = doc.createDocumentFragment();
                             for(var i = 0, seg = segments[0]; seg; seg = segments[++i]){
-                                var segNode = node.appendChild(t._buildShape(seg));
-                                t._setAttributes(segNode, {id: 's' + id + '_' + (i + 1)})
+                                var segNode = frgmt.appendChild(t._buildShape(seg));
+                                t._setAttributes(segNode, {id: 's' + seg.id})
                             }
+                            node.appendChild(frgmt);
                         }else{ var node = t._buildShape(obj); }
                         break;
                     case "image":
@@ -201,10 +202,11 @@
                         break;
                     case "button":
                         var node = t._createElement('g'),
-                            hitNode = t._createElement('g'),
+                            frgmt = doc.createDocumentFragment(),
+                            hitNode = frgmt.appendChild(t._createElement('g')),
                             states = obj.states;
                         for(var state in states){
-                            var stateNode = state == b.HIT ? hitNode : node.appendChild(t._createElement('g')),
+                            var stateNode = state == b.HIT ? hitNode : frgmt.insertBefore(t._createElement('g'), hitNode),
                                 list = states[state],
                                 cxform = obj.cxform;
                             t._setAttributes(stateNode, {
@@ -219,38 +221,39 @@
                                 stateNode.appendChild(t._buildCharacter(character));
                             }
                         }
-                        node.appendChild(hitNode);
+                        node.appendChild(frgmt);
                         break;
                     case "font":
                         var info = obj.info;
                         if(info){
                             var node = t._createElement("font"),
                                 faceNode = node.appendChild(t._createElement("font-face")),
+                                advanceTable = info.advanceTable
                                 glyphs = obj.glyphs,
                                 codes = info.codes,
+                                frgmt = doc.createDocumentFragment(),
                                 kerningTable = info.kerningTable;
                             t._setAttributes(faceNode, {
-                                font_family: id,
-                                units_per_em: 20480,
+                                "font-family": id,
+                                "units-per-em": 20480,
                                 ascent: info.ascent || 20480,
                                 descent: info.ascent || 20480,
-                                horiz_adv_x: '' + info.advanceTable
+                                "horiz-adv-x": advanceTable ? '' + advanceTable : 20480
                             });
                             for(var i = 0, glyph = glyphs[0]; glyph; glyph = glyphs[++i]){
                                 var cmds = glyph.commands,
                                     code = codes[i];
                                 if(cmds && code){
-                                    var glyphNode = node.appendChild(t._createElement("glyph"));
+                                    var glyphNode = frgmt.appendChild(t._createElement("glyph"));
                                     t._setAttributes(glyphNode, {
                                         unicode: String.fromCharCode(code),
                                         d: glyph.commands
                                     });
                                 }
                             }
-                            attrs.horiz_adv_x = 20480;
                             if(kerningTable){
                                 for(var i = 0, kern = kerningTable[0]; kern; kern = kerningTable[++i]){
-                                    var kernNode = node.appendChild(t._createElement("hkern"));
+                                    var kernNode = frgmt.appendChild(t._createElement("hkern"));
                                     t._setAttributes(kernNode, {
                                         g1: kern.code1,
                                         g2: kern.code2,
@@ -258,14 +261,14 @@
                                     });
                                 }
                             }
+                            node.appendChild(frgmt);
                         }
                         break;
                     case "text":
-                        var node = t._createElement('g'),
-                            strings = obj.strings,
-                            matrix = cloneMatrix(obj.matrix);
+                        var frgmt = doc.createDocumentFragment(),
+                            strings = obj.strings;
                         for(var i = 0, string = strings[0]; string; string = strings[++i]){
-                            var txtNode = node.appendChild(t._createElement("text")),
+                            var txtNode = frgmt.appendChild(t._createElement("text")),
                                 entries = string.entries,
                                 font = t._dictionary[string.font].object,
                                 info = font.info,
@@ -273,9 +276,7 @@
                                 advances = [],
                                 chars = [];
                                 x = string.x,
-                                y = string.y * -1,
-                                fill = string.fill,
-                                alpha = fill.alpha;
+                                y = string.y * -1;
                             for(var j = 0, entry = entries[0]; entry; entry = entries[++j]){
                                 var str = String.fromCharCode(codes[entry.index]);
                                 if(str != ' ' || chars.length){
@@ -285,17 +286,18 @@
                                 x += entry.advance;
                             }
                             t._setAttributes(txtNode, {
-                                font_family: font.id,
-                                font_size: string.size * 20,
-                                fill: color2string(fill),
-                                opacity: undefined == alpha ? 1 : alpha,
+                                id: 't' + id + '-' + (i + 1),
+                                "font-family": font.id,
+                                "font-size": string.size * 20,
                                 x: advances.join(' '),
                                 y: y
                             });
                             txtNode.appendChild(doc.createTextNode(chars.join('')));
                         }
-                        matrix.scaleY *= -1;
-                        attrs.transform = matrix2string(matrix);
+                        if(strings.length > 1){
+                            var node = t._createElement('g');
+                            node.appendChild(frgmt);
+                        }else{ var node = frgmt.firstChild; }
                         break;
                 }
                 if(node){
@@ -319,83 +321,9 @@
                 t._setAttributes(node, {href: "#" + img.id}, NS_XLINK);
                 t._setAttributes(node, {transform: matrix2string(fill.matrix)});
             }else{
-                var node = t._createElement("path"),
-                    line = shape.line,
-                    attrs = {d: shape.commands};
-                if(fill){
-                    var type = fill.type;
-                    if(fill.type){
-                        var fillNode = t._defs.appendChild(t._buildFill(fill));
-                        attrs.fill = "url(#" + fillId + ')';
-                    }else{
-                        attrs.fill = color2string(fill);
-                        var alpha = fill.alpha;
-                        if(undefined != alpha){ attrs.fill_opacity = alpha; }
-                    }
-                }else{ attrs.fill = "none"; }
-                if(line){
-                    var color = line.color,
-                        alpha = color.alpha;
-                    attrs.stroke = color2string(color);
-                    if(undefined != alpha){ attrs.stroke_opacity = alpha; }
-                }
-                t._setAttributes(node, attrs);
+                var node = t._createElement("path");
+                t._setAttributes(node, {d: shape.commands});
             }
-            return node;
-        },
-        
-        _buildFill: function(fill){
-            var type = fill.type,
-                t = this,
-                attrs = {id: type[0] + '_' + (t._nextFillId++)};
-            switch(type){
-                case "linear":
-                case "radial":
-                    var node = t._createElement(type + "Gradient"),
-                        s = Gordon.spreadModes,
-                        i = Gordon.interpolationModes,
-                        stops = fill.stops;
-                    attrs.gradientUnits = "userSpaceOnUse";
-                    attrs.gradientTransform = matrix2string(fill.matrix);
-                    if("linear" == type){ 
-                        attrs.x1 = -819.2;
-                        attrs.x2 = 819.2;
-                    }else{
-                        attrs.cx = attrs.cy = 0;
-                        attrs.r = 819.2;
-                    }
-                    switch(fill.spread){
-                        case s.REFLECT:
-                            attrs.spreadMethod = "reflect";
-                            break;
-                        case s.REPEAT:
-                            attrs.spreadMethod = "repeat";
-                            break;
-                    }
-                    if(fill.interpolation == i.LINEAR_RGB){ attrs.color_interpolation = "linearRGB"; }
-                    stops.forEach(function(stop){
-                        var stopNode = node.appendChild(t._createElement("stop")),
-                            color = stop.color,
-                            alpha = color.alpha;
-                        t._setAttributes(stopNode, {
-                            offset: stop.offset,
-                            stop_color: color2string(color),
-                            stop_opacity: alpha == undefined ? 1 : alpha
-                        });
-                    });
-                    break;
-                case "pattern":
-                    var node = t._createElement("pattern"),
-                        useNode = node.appendChild(t._createElement("use")),
-                        img = fill.image;
-                    t._setAttributes(useNode, {href: "#" + img.id}, NS_XLINK);
-                    attrs.patternUnits = "userSpaceOnUse";
-                    attrs.patternTransform = matrix2string(fill.matrix);
-                    attrs.width = img.width;
-                    attrs.height = img.height;
-                    break;
-            }
-            t._setAttributes(node, attrs);
             return node;
         },
         
@@ -410,22 +338,198 @@
             for(depth in d){
                 var character = d[depth];
                 if(character){
-                    if(character.clipDepth){
-                        var cpNode = t._defs.appendChild(t._createElement("clipPath")),
-                            useNode = cpNode.appendChild(t._createElement("use")),
-                            matrix = character.matrix;
-                        t._setAttributes(useNode, {id: 'c' + character.object});
-                        t._setAttributes(useNode, {href: '#s' + character.object}, NS_XLINK);
-                        if(matrix){ t._setAttributes(useNode, {transform: matrix2string(matrix)}); }
+                    var objId = character.object || t._displayList[depth].character.object;
+                    if(objId){
+                        if(character.clipDepth){
+                            var cpNode = t._defs.appendChild(t._createElement("clipPath")),
+                                useNode = cpNode.appendChild(t._createElement("use")),
+                                matrix = character.matrix;
+                            t._setAttributes(useNode, {id: 'p' + objId});
+                            t._setAttributes(useNode, {href: '#s' + objId}, NS_XLINK);
+                            if(matrix){ t._setAttributes(useNode, {transform: matrix2string(matrix)}); }
+                        }
+                        var cxform = character.cxform,
+                            characterId = character._id = objectId({
+                                object: objId,
+                                cxform: cxform
+                            }),
+                            c = t._cast[characterId],
+                            node = c ? c.node : t._prepare(t._dictionary[objId].object, cxform);
+                        t._setAttributes(node, {id: 'c' + characterId});
+                        t._defs.appendChild(node);
                     }
-                    var cxform = character.cxform;
-                    if(cxform){
-                        
-                    }
+                    t._cast[characterId] = {
+                        character: character,
+                        node: node
+                    };
                 }
             }
             t._timeline.push(frm);
             return t;
+        },
+        
+        _prepare: function(obj, cxform){
+            var type = obj.type,
+                t = this,
+                node = null,
+                id = obj.id,
+                attrs = {};
+            switch(type){
+                case "shape":
+                    var segments = obj.segments;
+                    if(segments){
+                        var node = t._createElement('g'),
+                            frgmt = doc.createDocumentFragment();
+                        for(var i = 0, seg = segments[0]; seg; seg = segments[++i]){
+                            frgmt.appendChild(t._prepare(seg, cxform));
+                        }
+                        node.appendChild(frgmt);
+                    }else{
+                        var node = t._createElement("use");
+                        t._setAttributes(node, {href: '#s' + id}, NS_XLINK);
+                        t._setStyle(node, obj.fill, obj.line, cxform);
+                    }
+                    break;
+                case "text":
+                    var strings = obj.strings,
+                        frgmt = doc.createDocumentFragment(),
+                        matrix = cloneMatrix(obj.matrix);
+                    for(var i = 0, string = strings[0]; string; string = strings[++i]){
+                        var useNode = frgmt.appendChild(t._createElement("use"));
+                        t._setAttributes(useNode, {href: '#t' + id + '-' + (i + 1)}, NS_XLINK);
+                        t._setStyle(useNode, string.fill, null, cxform);
+                    }
+                    if(strings.length > 1){
+                        var node = t._createElement('g');
+                        node.appendChild(frgmt);
+                    }else{ var node = frgmt.firstChild; }
+                    matrix.scaleY *= -1;
+                    attrs.transform = matrix2string(matrix);
+                    break;
+            }
+            if(node){ t._setAttributes(node, attrs); }
+            return node;
+        },
+        
+        _setStyle: function(node, fill, line, cxform){
+            var t = this,
+                attrs = {};
+            if(fill){
+                var type = fill.type;
+                if(fill.type){
+                    objectId(fill);
+                    var fillNode = t._defs.appendChild(t._buildFill(fill, cxform));
+                    attrs.fill = "url(#" + fillNode.id + ')';
+                }else{
+                    var color = cxform ? transformColor(fill, cxform) : fill,
+                        alpha = color.alpha;
+                    attrs.fill = color2string(color);
+                    if(undefined != alpha && alpha < 1){ attrs["fill-opacity"] = alpha; }
+                }
+            }else{ attrs.fill = "none"; }
+            if(line){
+                var color = cxform ? transformColor(line.color, cxform) : line.color,
+                    alpha = color.alpha;
+                attrs.stroke = color2string(color);
+                attrs["stroke-width"] = Math.max(line.width, 1);
+                if(undefined != alpha && alpha < 1){ attr["stroke-opacity"] = alpha; }
+            }
+            t._setAttributes(node, attrs);
+            return t;
+        },
+        
+        _buildFill: function(fill, cxform){
+            var t = this,
+                f = t._fills,
+                id = objectId(fill),
+                node = f[id];
+            if(!node){
+                var type = fill.type,
+                    attrs = {id: type[0] + id};
+                switch(type){
+                    case "linear":
+                    case "radial":
+                        var node = t._createElement(type + "Gradient"),
+                            s = Gordon.spreadModes,
+                            i = Gordon.interpolationModes,
+                            stops = fill.stops;
+                        attrs.gradientUnits = "userSpaceOnUse";
+                        attrs.gradientTransform = matrix2string(fill.matrix);
+                        if("linear" == type){ 
+                            attrs.x1 = -819.2;
+                            attrs.x2 = 819.2;
+                        }else{
+                            attrs.cx = attrs.cy = 0;
+                            attrs.r = 819.2;
+                        }
+                        switch(fill.spread){
+                            case s.REFLECT:
+                                attrs.spreadMethod = "reflect";
+                                break;
+                            case s.REPEAT:
+                                attrs.spreadMethod = "repeat";
+                                break;
+                        }
+                        if(fill.interpolation == i.LINEAR_RGB){ attrs["color-interpolation"] = "linearRGB"; }
+                        stops.forEach(function(stop){
+                            var stopNode = node.appendChild(t._createElement("stop")),
+                                color = cxform ? transformColor(stop.color, cxform) : stop.color,
+                                alpha = color.alpha;
+                            t._setAttributes(stopNode, {
+                                offset: stop.offset,
+                                "stop-color": color2string(color),
+                                "stop-opacity": alpha == undefined ? 1 : alpha / 255
+                            });
+                        });
+                        break;
+                    case "pattern":
+                        var node = t._createElement("pattern");
+                        if(cxform){
+                            var canvas = doc.createElement("canvas"),
+                                img = doc.getElementById('i' + obj.image.id),
+                                width = img.width,
+                                height = img.height,
+                                ctx = canvas.getContext("2d");
+                            canvas.width = width;
+                            canvas.height = height;
+                            ctx.drawImage(img, 0, 0);
+                            var imgData = ctx.getImageData(0, 0, width, height),
+                                pxData = imgData.data,
+                                multR = cxform.multR,
+                                multG = cxform.multG,
+                                multB = cxform.multB,
+                                multA = cxform.multA,
+                                addR = cxform.addR,
+                                addG = cxform.addG,
+                                addB = cxform.addB,
+                                addA = cxform.addA;
+                            for(var i = 0; undefined != pxData[i]; i+= 4){
+                                pxData[i] = ~~Math.max(0, Math.min((pxData[i] * multR) + addR, 255));
+                                pxData[i + 1] = ~~Math.max(0, Math.min((pxData[i + 1] * multG) + addG, 255));
+                                pxData[i + 2] = ~~Math.max(0, Math.min((pxData[i + 2] * multB) + addB, 255));
+                                pxData[i + 3] = ~~Math.max(0, Math.min((pxData[i + 3] * multA) + addA, 255));
+                            }
+                            var imgNode = node.appendChild(t._createElement("image"));
+                            t._setAttributes(imgNode, {href: canvas.toDataURL()}, NS_XLINK);
+                            t._setAttributes(imgNode, {
+                                width: width,
+                                height: height
+                            });
+                        }else{
+                            var useNode = node.appendChild(t._createElement("use")),
+                                img = fill.image;
+                            t._setAttributes(useNode, {href: "#i" + img.id}, NS_XLINK);
+                        }
+                        attrs.patternUnits = "userSpaceOnUse";
+                        attrs.patternTransform = matrix2string(fill.matrix);
+                        attrs.width = img.width;
+                        attrs.height = img.height;
+                        break;
+                }
+                t._setAttributes(node, attrs);
+                t._fills[id] = node;
+            }
+            return node;
         },
         
         show: function(frmIdx){
@@ -469,6 +573,7 @@
                 var attrs = {},
                     matrix = character.matrix;
                 if(matrix){ attrs.transform = matrix2string(matrix); }
+                t._setAttributes(node, {href: "#c" + character._id}, NS_XLINK);
                 t._setAttributes(node, attrs);
             }
             d[depth] = {
@@ -482,7 +587,7 @@
             var t = this;
             if(character.clipDepth){
                 var node = t._createElement('g');
-                t._setAttributes(node, {clip_path: "url(#c" + character.object + ')'});
+                t._setAttributes(node, {"clip-path": "url(#p" + character.object + ')'});
             }else{
                 var d = t._dictionary,
                     item = d[character.object],
@@ -495,6 +600,7 @@
                             currState = b.UP,
                             m = Gordon.mouseButtons,
                             isMouseOver = false,
+                            action = obj.action,
                             trackAsMenu = obj.trackAsMenu;
                         for(var s in buttonStates){ stateNodes[s] = node.getElementsByClassName(buttonStates[s])[0]; }
                         var hitNode = stateNodes[b.HIT];
@@ -509,7 +615,7 @@
                             if(!(buttonMask & m.LEFT)){
                                 if(isMouseOver){
                                     setState(b.OVER);
-                                    obj.action();
+                                    if(action){ action(); }
                                 }else{ setState(b.UP); }
                                 doc.removeEventListener("mouseup", mouseupHandle, false);
                                 t.eventTarget = null;
@@ -548,7 +654,6 @@
                         break;
                     default:
                         var node = t._createElement("use");
-                        t._setAttributes(node, {href: "#" + type[0] + obj.id}, NS_XLINK);
                 }
             }
             return node;
@@ -584,6 +689,15 @@
         ] + ')';
     }
     
+    function transformColor(color, cxform){
+        return {
+            red: ~~Math.max(0, Math.min((color.red * cxform.multR) + cxform.addR, 255)),
+            green: ~~Math.max(0, Math.min((color.green * cxform.multG) + cxform.addG, 255)),
+            blue: ~~Math.max(0, Math.min((color.blue * cxform.multB) + cxform.addB, 255)),
+            alpha: ~~Math.max(0, Math.min((color.alpha * cxform.multA) + cxform.addA, 255))
+        }
+    }
+    
     function cloneCharacter(character){
         return {
             object: character.object,
@@ -591,6 +705,16 @@
             matrix: character.matrix,
             cxform: character.cxform
         };
+    }
+    
+    function objectId(object){
+        var callee = arguments.callee,
+            memo = callee._memo || (callee._memo = {}),
+            nextId = (callee._nextId || (callee._nextId = 1)),
+            key = JSON.stringify(object),
+            origId = memo[key];
+        if(!origId){ memo[key] = nextId; }
+        return origId || callee._nextId++;
     }
     
     function cloneMatrix(matrix){

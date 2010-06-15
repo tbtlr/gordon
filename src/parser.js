@@ -97,6 +97,8 @@
                 if(edges instanceof Array){
                     var segments = shape.segments = [];
                     for(var i = 0, seg = edges[0]; seg; seg = edges[++i]){ segments.push({
+                        type: "shape",
+                        id: id + '-' + (i + 1),
                         commands: edges2cmds(seg.records, !!seg.line),
                         fill: seg.fill,
                         line: seg.line
@@ -298,7 +300,7 @@
                         if(l){ segments.push({
                             records: recs,
                             fill: fillStyles[i],
-                            index: recs[l - 1].i
+                            "_index": recs[l - 1].i
                         }); }
                     }
                     var i = lineStyles.length;
@@ -307,11 +309,11 @@
                         if(recs){ segments.push({
                             records: recs,
                             line: lineStyles[i],
-                            index: recs[recs.length - 1].i
+                            "_index": recs[recs.length - 1].i
                         }); }
                     }
                     segments.sort(function(a, b){
-                        return a.index - b.index;
+                        return a._index - b._index;
                     });
                     if(segments.length > 1){ return segments; }
                     else{ return segments[0]; }
@@ -344,10 +346,10 @@
                                 },
                                 numStops = s.readUB(4);
                             while(numStops--){
-                                var offset = s.readUI8() / 255,
+                                var offset = s.readUI8() / 256,
                                     color = withAlpha || morph ? s.readRGBA() : s.readRGB();
                                 stops.push({
-                                    offset: morph ? [offset, s.readUI8() / 255] : offset,
+                                    offset: morph ? [offset, s.readUI8() / 256] : offset,
                                     color: morph ? [color, s.readRGBA()] : color
                                 });
                             }
