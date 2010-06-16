@@ -200,29 +200,6 @@
                         attrs.width = width;
                         attrs.height = height;
                         break;
-                    case "button":
-                        var node = t._createElement('g'),
-                            frgmt = doc.createDocumentFragment(),
-                            hitNode = frgmt.appendChild(t._createElement('g')),
-                            states = obj.states;
-                        for(var state in states){
-                            var stateNode = state == b.HIT ? hitNode : frgmt.insertBefore(t._createElement('g'), hitNode),
-                                list = states[state],
-                                cxform = obj.cxform;
-                            t._setAttributes(stateNode, {
-                                className: buttonStates[state],
-                                opacity: state == b.UP ? 1 : 0
-                            });
-                            for(var depth in list){
-                                if(cxform){
-                                    var character = cloneCharacter(list[depth]);
-                                    character.cxform = cxform;
-                                }else{ var character = list[depth]; }
-                                stateNode.appendChild(t._buildCharacter(character));
-                            }
-                        }
-                        node.appendChild(frgmt);
-                        break;
                     case "font":
                         var info = obj.info;
                         if(info){
@@ -390,6 +367,83 @@
                         t._setStyle(node, obj.fill, obj.line, cxform);
                     }
                     break;
+                case "button":
+                    var node = t._createElement('g'),
+                        frgmt = doc.createDocumentFragment(),
+                        states = obj.states,
+                        hitNode = null,
+                        stateNodes = {},
+                        currState = b.UP,
+                        m = Gordon.mouseButtons,
+                        isMouseOver = false,
+                        action = obj.action,
+                        trackAsMenu = obj.trackAsMenu;
+                    for(var state in states){
+                        var stateFrgmt = doc.createDocumentFragment(),
+                            list = states[state];
+                        for(var depth in list){
+                            var character = list[depth];
+                            stateFrgmt.appendChild(t._prepare(t._dictionary[character.object].object, obj.cxform));
+                        }
+                        if(stateFrgmt.length > 1){
+                            var stateNode = t._createElement('g');
+                            stateNode.appendChild(stateFrgmt);
+                        }else{ var stateNode = stateFrgmt.firstChild; }
+                        t._setAttributes(stateNode, {opacity: state == b.UP ? 1 : 0});
+                        if(state == b.HIT){ hitNode = stateNode; }
+                        else{ stateNodes[state] = frgmt.appendChild(stateNode); }
+                    }
+                    node.appendChild(frgmt);
+                    node.appendChild(hitNode);
+                    
+                    function setState(state){
+                        t._setAttributes(stateNodes[currState], {opacity: 0});
+                        t._setAttributes(stateNodes[state], {opacity: 1});
+                        currState = state;
+                    };
+                    
+                    function mouseupHandle(e){
+                        if(!(buttonMask & m.LEFT)){
+                            if(isMouseOver){
+                                setState(b.OVER);
+                                if(action){ action(); }
+                            }else{ setState(b.UP); }
+                            doc.removeEventListener("mouseup", mouseupHandle, false);
+                            t.eventTarget = null;
+                        }
+                        return false;
+                    };
+                    
+                    hitNode.onmousemove = function(e){
+                        if(!t.eventTarget){
+                            if(buttonMask & m.LEFT){ this.onmousedown(e); }
+                            else{ setState(b.OVER); }
+                        }  
+                        if(!isMouseOver){
+                            var handle = doc.addEventListener("mousemove", function(){
+                                if(!t.eventTarget || trackAsMenu){ setState(b.UP); }
+                                doc.removeEventListener("mousemove", handle, true);
+                                isMouseOver = false;
+                            }, true);
+                        }
+                        isMouseOver = true;
+                        return false;
+                    };
+                    
+                    hitNode.onmousedown = function(e){
+                        if(buttonMask & m.LEFT){
+                            setState(b.DOWN);
+                            doc.addEventListener("mouseup", mouseupHandle, false);
+                            t.eventTarget = this;
+                        }
+                        return false;
+                    };
+                    
+                    hitNode.onmouseup = function(e){
+                        setState(b.OVER);
+                        return false;
+                    };
+                    break;
                 case "text":
                     var strings = obj.strings,
                         frgmt = doc.createDocumentFragment(),
@@ -551,8 +605,11 @@
                 replace = d[depth];
             if(replace && !character.object){ var node = replace.node; }
             else{
-                var node = t._buildCharacter(character),
-                    stage = t._stage;
+                if(character.clipDepth){
+                    var node = t._createElement('g');
+                    t._setAttributes(node, {"clip-path": "url(#p" + character.object + ')'});
+                }else{ var node = t._createElement("use"); }
+                var stage = t._stage;
                 if(replace){ t.remove(depth); }
                 if(1 == depth){ stage.insertBefore(node, stage.firstChild); }
                 else{
@@ -581,82 +638,6 @@
                 node: node
             };
             return t;
-        },
-        
-        _buildCharacter: function(character){
-            var t = this;
-            if(character.clipDepth){
-                var node = t._createElement('g');
-                t._setAttributes(node, {"clip-path": "url(#p" + character.object + ')'});
-            }else{
-                var d = t._dictionary,
-                    item = d[character.object],
-                    obj = item.object,
-                    type = obj.type;
-                switch(type){
-                    case "button":
-                        var node = item.node.cloneNode(true),
-                            stateNodes = {},
-                            currState = b.UP,
-                            m = Gordon.mouseButtons,
-                            isMouseOver = false,
-                            action = obj.action,
-                            trackAsMenu = obj.trackAsMenu;
-                        for(var s in buttonStates){ stateNodes[s] = node.getElementsByClassName(buttonStates[s])[0]; }
-                        var hitNode = stateNodes[b.HIT];
-                        
-                        function setState(state){
-                            t._setAttributes(stateNodes[currState], {opacity: 0});
-                            t._setAttributes(stateNodes[state], {opacity: 1});
-                            currState = state;
-                        };
-                        
-                        function mouseupHandle(e){
-                            if(!(buttonMask & m.LEFT)){
-                                if(isMouseOver){
-                                    setState(b.OVER);
-                                    if(action){ action(); }
-                                }else{ setState(b.UP); }
-                                doc.removeEventListener("mouseup", mouseupHandle, false);
-                                t.eventTarget = null;
-                            }
-                            return false;
-                        };
-                        
-                        hitNode.onmouseover = function(e){
-                            isMouseOver = true;
-                            if(!t.eventTarget){
-                                if(buttonMask & m.LEFT){ this.onmousedown(e); }
-                                else{ setState(b.OVER); }
-                            }
-                            return false;
-                        };
-                        
-                        hitNode.onmouseout = function(e){
-                            isMouseOver = false;
-                            if(!t.eventTarget || trackAsMenu){ setState(b.UP); }
-                            return false;
-                        };
-                        
-                        hitNode.onmousedown = function(e){
-                            if(buttonMask & m.LEFT){
-                                setState(b.DOWN);
-                                doc.addEventListener("mouseup", mouseupHandle, false);
-                                t.eventTarget = this;
-                            }
-                            return false;
-                        };
-                        
-                        hitNode.onmouseup = function(e){
-                            setState(b.OVER);
-                            return false;
-                        };
-                        break;
-                    default:
-                        var node = t._createElement("use");
-                }
-            }
-            return node;
         },
         
         remove: function(depth){
@@ -711,10 +692,27 @@
         var callee = arguments.callee,
             memo = callee._memo || (callee._memo = {}),
             nextId = (callee._nextId || (callee._nextId = 1)),
-            key = JSON.stringify(object),
+            key = object2key(object),
             origId = memo[key];
         if(!origId){ memo[key] = nextId; }
         return origId || callee._nextId++;
+    }
+    
+    function object2key(object){
+        var a = 1,
+            b = 0;
+        for(var prop in object){
+            var val = object[prop];
+            if("object" == typeof val){ a = arguments.callee(val); }
+            else{
+                var buff = '' + val;
+                for(var j = 0; buff[j]; j++){
+                    a = (a + buff.charCodeAt(j)) % 65521;
+                    b = (b + a) % 65521;
+                }
+            }
+        }
+        return (b << 16) | a;
     }
     
     function cloneMatrix(matrix){

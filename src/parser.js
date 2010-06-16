@@ -250,7 +250,7 @@
                         list = rightFillEdges[fill];
                         if(list){ push.apply(fillEdges, list); }
                         for(var j = 0, edge = fillEdges[0]; edge; edge = fillEdges[++j]){
-                            var key = calcPtKey(edge.x1, edge.y1),
+                            var key = pt2key(edge.x1, edge.y1),
                                 list = edgeMap[key] || (edgeMap[key] = []);
                             list.push(edge);
                         }
@@ -261,12 +261,12 @@
                             var edge = fillEdges[j];
                             if(!edge.c){
                                 var seg = [],
-                                    firstKey = calcPtKey(edge.x1, edge.y1),
+                                    firstKey = pt2key(edge.x1, edge.y1),
                                     usedMap = {};
                                 do{
                                     seg.push(edge);
                                     usedMap[edge.i] = true;
-                                    var key = calcPtKey(edge.x2, edge.y2),
+                                    var key = pt2key(edge.x2, edge.y2),
                                         list = edgeMap[key],
                                         favEdge = fillEdges[j + 1],
                                         nextEdge = null;
@@ -307,7 +307,7 @@
                         if(recs){ segments.push({
                             records: recs,
                             line: lineStyles[i],
-                            "_index": recs[recs.length - 1].i
+                            _index: recs[recs.length - 1].i
                         }); }
                     }
                     segments.sort(function(a, b){
@@ -908,7 +908,7 @@
             return cmds.join('');
         }
         
-        function calcPtKey(x, y){
+        function pt2key(x, y){
             return (x + 50000) * 100000 + y;
         }
         
