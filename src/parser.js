@@ -1,5 +1,5 @@
 (function(){
-    if(false && doc && window.Worker){
+    if(doc && window.Worker){
         var REGEXP_SCRIPT_SRC = /(^|.*\/)gordon.(min\.)?js$/,
             scripts = doc.getElementsByTagName("script"),
             src = '',
@@ -18,8 +18,6 @@
                 w = t._worker = worker;
             t.data = data;
             t.ondata = ondata;
-            
-            w.onerror = function(e){ };
             
             w.onmessage = function(e){
                 t.ondata(e.data);
