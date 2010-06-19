@@ -610,9 +610,13 @@
                             var stateNode = t._createElement('g');
                             stateNode.appendChild(stateFrag);
                         }else{ var stateNode = stateFrag.firstChild; }
-                        t._setAttributes(stateNode, {opacity: state == b.UP ? 1 : 0});
-                        if(state == b.HIT){ hitNode = stateNode; }
-                        else{ stateNodes[state] = frag.appendChild(stateNode); }
+                        if(state == b.HIT){
+                            t._setAttributes(stateNode, {opacity: 0});
+                            hitNode = stateNode;
+                        }else{
+                            t._setAttributes(stateNode, {visibility: state == b.UP ? "visible" : "hidden"});
+                            stateNodes[state] = frag.appendChild(stateNode);
+                        }
                     }
                     node.appendChild(frag);
                     node.appendChild(hitNode);
@@ -623,42 +627,45 @@
                             setState._cursor = style.cursor;
                             style.cursor = "pointer";
                         }
-                        t._setAttributes(stateNodes[currState], {opacity: 0});
-                        t._setAttributes(stateNodes[state], {opacity: 1});
+                        t._setAttributes(stateNodes[currState], {visibility: "hidden"});
+                        t._setAttributes(stateNodes[state], {visibility: "visible"});
                         currState = state;
                     };
                     
                     hitNode.onmouseover = function(){
                         if(!(buttonMask & m.LEFT)){ setState(b.OVER); }
-                        else if(t.eventTarget == this){ setState(b.DOWN); }
+                        else if(this == t.eventTarget){ setState(b.DOWN); }
                         return false;
                     }
                     
                     hitNode.onmousedown = function(){
-                        setState(b.DOWN);
                         t.eventTarget = this;
+                        setState(b.DOWN);
                         var handle = doc.addEventListener("mouseup", function(){
                             setState(b.UP);
                             doc.removeEventListener("mouseup", handle, true);
+                            t.eventTarget = null;
                         }, true);
                         return false;
                     }
                     
                     hitNode.onmouseup = function(){
-                        if(t.eventTarget == this){
+                        setState(b.OVER);
+                        if(this == t.eventTarget){
                             if(action){ action(); }
                             t.eventTarget = null;
                         }
-                        setState(b.OVER);
                         return false;
                     }
                     
                     hitNode.onmouseout = function(){
-                        if(t.eventTarget == this && !trackAsMenu){ setState(b.OVER); }
-                        else{
-                            setState(b.UP);
-                            t.eventTarget = null;
+                        if(this == t.eventTarget){
+                            if(trackAsMenu){
+                                t.eventTarget = null;
+                                setState(b.UP);
+                            }else{ setState(b.OVER); }
                         }
+                        else{ setState(b.UP); }
                         return false;
                     }
                     break;
