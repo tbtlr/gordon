@@ -16,7 +16,7 @@
             t = this,
             i = t.length = data.length;
         t.offset = 0;
-        for(var i = 0; data[i]; i++){ buff.push(String.fromCharCode(data.charCodeAt(i) & 0xff)); }
+        for(var i = 0; data[i]; i++){ buff.push(fromCharCode(data.charCodeAt(i) & 0xff)); }
         t._buffer = buff.join('');
         t._bitBuffer = null;
         t._bitOffset = 8;
@@ -109,7 +109,7 @@
                         t.offset++;
                     }
                 }
-                var s = new Gordon.Stream(String.fromCharCode.apply(String, buff)),
+                var s = new Gordon.Stream(fromCharCode.apply(String, buff)),
                     sign = s.readUB(1),
                     expo = s.readUB(numEBits),
                     mantis = 0,
@@ -190,7 +190,7 @@
                     i = t.length - t.offset;
                 while(i--){
                     var code = t.readByteAt(t.offset++);
-                    if(code){ chars.push(String.fromCharCode(code)); }
+                    if(code){ chars.push(fromCharCode(code)); }
                     else{ break; }
                 }
                 var str = chars.join('');
@@ -321,7 +321,7 @@
             return t;
         },
         
-        unzip: function(raw){
+        unzip: function uz(raw){
             var t = this,
                 buff = [],
                 o = DEFLATE_CODE_LENGTH_ORDER,
@@ -330,44 +330,63 @@
             t.seek(2);
             do{
                 var isFinal = t.readUB(1, true),
-                    type = t.readUB(2, true),
-                    numLitLengths = t.readUB(5, true) + 257,
-                    numDistLengths = t.readUB(5, true) + 1,
-                    numCodeLenghts = t.readUB(4, true) + 4,
-                    codeLengths = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+                    type = t.readUB(2, true);
                 if(type){
-                    for(var i = 0; i < numCodeLenghts; i++){ codeLengths[o[i]] = t.readUB(3, true); }
-                    var codeTable = buildHuffTable(codeLengths),
-                        litLengths = [],
-                        prevCodeLen = 0,
-                        maxLengths = numLitLengths + numDistLengths;
-                    while(litLengths.length < maxLengths){
-                        var sym = decodeSymbol(t, codeTable);
-                        switch(sym){
-                            case 16:
-                                var i = t.readUB(2, true) + 3;
-                                while(i--){ litLengths.push(prevCodeLen); }
-                                break;
-                            case 17:
-                                var i = t.readUB(3, true) + 3;
-                                while(i--){ litLengths.push(0); }
-                                break;
-                            case 18:
-                                var i = t.readUB(7, true) + 11;
-                                while(i--){ litLengths.push(0); }
-                                break;
-                            default:
-                                if(sym <= 15){
-                                    litLengths.push(sym);
-                                    prevCodeLen = sym;
-                                }
+                    if(1 == type){
+                        var distTable = uz.fixedDistTable,
+                            litTable = uz.fixedLitTable;
+                        if(!distTable){
+                            var bitLengths = [];
+                            for(var i = 0; i < 32; i++){ bitLengths.push(5); }
+                            distTable = uz.fixedDistTable = buildHuffTable(bitLengths);
                         }
+                        if(!litTable){
+                            var bitLengths = [];
+                            for(var i = 0; i <= 143; i++){ bitLengths.push(8); }
+                            for(; i <= 255; i++){ bitLengths.push(9); }
+                            for(; i <= 279; i++){ bitLengths.push(7); }
+                            for(; i <= 287; i++){ bitLengths.push(8); }
+                            litTable = uz.fixedLitTable = buildHuffTable(bitLengths);
+                        }
+                    }else{
+                        var numLitLengths = t.readUB(5, true) + 257,
+                            numDistLengths = t.readUB(5, true) + 1,
+                            numCodeLenghts = t.readUB(4, true) + 4,
+                            codeLengths = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+                        for(var i = 0; i < numCodeLenghts; i++){ codeLengths[o[i]] = t.readUB(3, true); }
+                        var codeTable = buildHuffTable(codeLengths),
+                            litLengths = [],
+                            prevCodeLen = 0,
+                            maxLengths = numLitLengths + numDistLengths;
+                        while(litLengths.length < maxLengths){
+                            var sym = decodeSymbol(t, codeTable);
+                            switch(sym){
+                                case 16:
+                                    var i = t.readUB(2, true) + 3;
+                                    while(i--){ litLengths.push(prevCodeLen); }
+                                    break;
+                                case 17:
+                                    var i = t.readUB(3, true) + 3;
+                                    while(i--){ litLengths.push(0); }
+                                    break;
+                                case 18:
+                                    var i = t.readUB(7, true) + 11;
+                                    while(i--){ litLengths.push(0); }
+                                    break;
+                                default:
+                                    if(sym <= 15){
+                                        litLengths.push(sym);
+                                        prevCodeLen = sym;
+                                    }
+                            }
+                        }
+                        var distTable = buildHuffTable(litLengths.splice(numLitLengths, numDistLengths)),
+                            litTable = buildHuffTable(litLengths);
                     }
-                    var distTable = buildHuffTable(litLengths.splice(numLitLengths, numDistLengths)),
-                        litTable = buildHuffTable(litLengths);
+                    console.log(distTable, litTable);
                     do{
                         var sym = decodeSymbol(t, litTable);
-                        if(sym < 256){ buff.push(raw ? sym : String.fromCharCode(sym)); }
+                        if(sym < 256){ buff.push(raw ? sym : fromCharCode(sym)); }
                         else if(sym > 256){
                             var lengthMap = m[sym - 257],
                                 len = lengthMap[1] + t.readUB(lengthMap[0], true),
@@ -393,7 +412,7 @@
     function buildHuffTable(bitLengths){
         var numLengths = bitLengths.length,
             blCount = [],
-            maxBits = Math.max.apply(Math, bitLengths),
+            maxBits = max.apply(Math, bitLengths),
             nextCode = [],
             code = 0,
             table = {},
@@ -428,7 +447,7 @@
             code = (code << 1) | s.readUB(1, true);
             len++;
             var entry = table[code];
-            if(entry != undefined && entry.length == len){ return entry.symbol }
+            if(undefined != entry && entry.length == len){ return entry.symbol }
         }
     }
 })();

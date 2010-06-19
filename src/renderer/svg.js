@@ -7,24 +7,23 @@
         buttonMask = 0;
     for(var state in b){ buttonStates[b[state]] = state.toLowerCase(); }
     
-    Gordon.SvgRenderer = function(width, height, viewWidth, viewHeight, quality, scale, bgcolor){
+    Gordon.SvgRenderer = function(width, height, frmSize, quality, scale, bgcolor){
         var t = this,
             n = t.node = t._createElement("svg"),
+            frmLeft = frmSize.left,
+            frmTop = frmSize.top,
             attrs = {
                 width: width,
-                height: height
+                height: height,
+                viewBox: '' + [frmLeft, frmTop, frmSize.right - frmLeft, frmSize.bottom - frmTop]
             };
         t.width = width;
         t.height = height;
-        t.viewWidth = viewWidth;
-        t.viewHeight = viewHeight;
+        t.frmSize = frmSize;
         t.quality = quality || Gordon.qualityValues.HIGH;
         t.scale = scale || Gordon.scaleValues.SHOW_ALL;
         t.bgcolor = bgcolor;
-        if(viewWidth && viewHeight && (width != viewWidth || height != viewHeight)){
-            attrs.viewBox = [0, 0, viewWidth, viewHeight] + '';
-            if(scale == Gordon.scaleValues.EXACT_FIT){ attrs.preserveAspectRatio = "none"; }
-        }
+        if(scale == Gordon.scaleValues.EXACT_FIT){ attrs.preserveAspectRatio = "none"; }
         t._setAttributes(n, attrs);
         t._defs = n.appendChild(t._createElement("defs"));
         var s = t._stage = n.appendChild(t._createElement('g'));
@@ -37,7 +36,7 @@
         if(bgcolor){ t.setBgcolor(bgcolor); }
         t._dictionary = {};
         t._fills = {};
-        t._cast = {};
+        t._set = {};
         t._timeline = [];
         t._displayList = {};
         t._eventTarget = null;
@@ -48,9 +47,11 @@
         },
         
         _setAttributes: function(node, attrs, ns){
-            for(var name in attrs){
-                if(ns){ node.setAttributeNS(ns, name, attrs[name]); }
-                else{ node.setAttribute(name, attrs[name]); }
+            if(node){
+                for(var name in attrs){
+                    if(ns){ node.setAttributeNS(ns, name, attrs[name]); }
+                    else{ node.setAttribute(name, attrs[name]); }
+                }
             }
             return node;
         },
@@ -116,9 +117,9 @@
         },
         
         define: function(obj){
-            var id = obj.id,
-                t = this,
+            var t = this,
                 d = t._dictionary,
+                id = obj.id,
                 item = d[id],
                 type = obj.type,
                 node = null,
@@ -126,16 +127,26 @@
             if(!item || !item.node){
                 switch(type){
                     case "shape":
-                        var segments = obj.segments;
+                        var segments = obj.segments,
+                            fill = obj.fill;
                         if(segments){
                             var node = t._createElement('g'),
-                                frgmt = doc.createDocumentFragment();
+                                frag = doc.createDocumentFragment();
                             for(var i = 0, seg = segments[0]; seg; seg = segments[++i]){
-                                var segNode = frgmt.appendChild(t._buildShape(seg));
-                                t._setAttributes(segNode, {id: 's' + seg.id})
+                                var segNode = frag.appendChild(t._createElement("path"));
+                                t._setAttributes(segNode, {id: 's' + seg.id, d: seg.commands});
                             }
-                            node.appendChild(frgmt);
-                        }else{ var node = t._buildShape(obj); }
+                            node.appendChild(frag);
+                        }else{
+                            if(fill && "pattern" == fill.type && !fill.repeat){
+                                var node = t._createElement("use");
+                                t._setAttributes(node, {href: "#" + fill.image.id}, NS_XLINK);
+                                attrs.transform = matrix2string(fill.matrix);
+                            }else{
+                                var node = t._createElement("path");
+                                attrs.d = obj.commands;
+                            }
+                        }
                         break;
                     case "image":
                         var node = t._createElement("image"),
@@ -176,16 +187,16 @@
                             var alphaData = obj.alphaData,
                                 uri = "data:image/jpeg;base64," + btoa(obj.data);
                             if(alphaData){
-                                var data = (new Gordon.Stream(alphaData)).unzip(true),
-                                    img = new Image(),
+                                var img = new Image(),
                                     canvas = doc.createElement("canvas"),
-                                    ctx = canvas.getContext("2d");
+                                    ctx = canvas.getContext("2d"),
+                                    len = width * height,
+                                    data = (new Gordon.Stream(alphaData)).unzip(true);
                                 img.src = uri;
                                 canvas.width = width;
                                 canvas.height = height;
                                 ctx.drawImage(img, 0, 0);
-                                var len = width * height;
-                                    imgData = ctx.getImageData(0, 0, width, height),
+                                var imgData = ctx.getImageData(0, 0, width, height),
                                     pxData = imgData.data,
                                     pxIdx = 0;
                                 for(var i = 0; i < len; i++){
@@ -208,7 +219,7 @@
                                 advanceTable = info.advanceTable
                                 glyphs = obj.glyphs,
                                 codes = info.codes,
-                                frgmt = doc.createDocumentFragment(),
+                                frag = doc.createDocumentFragment(),
                                 kerningTable = info.kerningTable;
                             t._setAttributes(faceNode, {
                                 "font-family": id,
@@ -221,16 +232,16 @@
                                 var cmds = glyph.commands,
                                     code = codes[i];
                                 if(cmds && code){
-                                    var glyphNode = frgmt.appendChild(t._createElement("glyph"));
+                                    var glyphNode = frag.appendChild(t._createElement("glyph"));
                                     t._setAttributes(glyphNode, {
-                                        unicode: String.fromCharCode(code),
+                                        unicode: fromCharCode(code),
                                         d: glyph.commands
                                     });
                                 }
                             }
                             if(kerningTable){
                                 for(var i = 0, kern = kerningTable[0]; kern; kern = kerningTable[++i]){
-                                    var kernNode = frgmt.appendChild(t._createElement("hkern"));
+                                    var kernNode = frag.appendChild(t._createElement("hkern"));
                                     t._setAttributes(kernNode, {
                                         g1: kern.code1,
                                         g2: kern.code2,
@@ -238,14 +249,14 @@
                                     });
                                 }
                             }
-                            node.appendChild(frgmt);
+                            node.appendChild(frag);
                         }
                         break;
                     case "text":
-                        var frgmt = doc.createDocumentFragment(),
+                        var frag = doc.createDocumentFragment(),
                             strings = obj.strings;
                         for(var i = 0, string = strings[0]; string; string = strings[++i]){
-                            var txtNode = frgmt.appendChild(t._createElement("text")),
+                            var txtNode = frag.appendChild(t._createElement("text")),
                                 entries = string.entries,
                                 font = t._dictionary[string.font].object,
                                 info = font.info,
@@ -255,8 +266,8 @@
                                 x = string.x,
                                 y = string.y * -1;
                             for(var j = 0, entry = entries[0]; entry; entry = entries[++j]){
-                                var str = String.fromCharCode(codes[entry.index]);
-                                if(str != ' ' || chars.length){
+                                var str = fromCharCode(codes[entry.index]);
+                                if(' ' != str || chars.length){
                                     advances.push(x);
                                     chars.push(str);
                                 }
@@ -273,8 +284,8 @@
                         }
                         if(strings.length > 1){
                             var node = t._createElement('g');
-                            node.appendChild(frgmt);
-                        }else{ var node = frgmt.firstChild; }
+                            node.appendChild(frag);
+                        }else{ var node = frag.firstChild; }
                         break;
                 }
                 if(node){
@@ -289,21 +300,6 @@
             return t;
         },
         
-        _buildShape: function(shape){
-            var fill = shape.fill,
-                t = this;
-            if(fill && "pattern" == fill.type && !fill.repeat){
-                var node = t._createElement("use"),
-                    img = fill.image;
-                t._setAttributes(node, {href: "#" + img.id}, NS_XLINK);
-                t._setAttributes(node, {transform: matrix2string(fill.matrix)});
-            }else{
-                var node = t._createElement("path");
-                t._setAttributes(node, {d: shape.commands});
-            }
-            return node;
-        },
-        
         frame: function(frm){
             var bgcolor = frm.bgcolor,
                 t = this,
@@ -314,155 +310,99 @@
             }
             for(depth in d){
                 var character = d[depth];
-                if(character){
-                    var objId = character.object || t._displayList[depth].character.object;
-                    if(objId){
-                        if(character.clipDepth){
-                            var cpNode = t._defs.appendChild(t._createElement("clipPath")),
-                                useNode = cpNode.appendChild(t._createElement("use")),
-                                matrix = character.matrix;
-                            t._setAttributes(useNode, {id: 'p' + objId});
-                            t._setAttributes(useNode, {href: '#s' + objId}, NS_XLINK);
-                            if(matrix){ t._setAttributes(useNode, {transform: matrix2string(matrix)}); }
-                        }
-                        var cxform = character.cxform,
-                            characterId = character._id = objectId({
-                                object: objId,
-                                cxform: cxform
-                            }),
-                            c = t._cast[characterId],
-                            node = c ? c.node : t._prepare(t._dictionary[objId].object, cxform);
-                        t._setAttributes(node, {id: 'c' + characterId});
-                        t._defs.appendChild(node);
-                    }
-                    t._cast[characterId] = {
-                        character: character,
-                        node: node
-                    };
-                }
+                if(character){ t._cast(character); }
             }
             t._timeline.push(frm);
             return t;
         },
         
-        _prepare: function(obj, cxform){
-            var type = obj.type,
-                t = this,
-                node = null,
-                id = obj.id,
-                attrs = {};
-            switch(type){
-                case "shape":
-                    var segments = obj.segments;
-                    if(segments){
-                        var node = t._createElement('g'),
-                            frgmt = doc.createDocumentFragment();
-                        for(var i = 0, seg = segments[0]; seg; seg = segments[++i]){
-                            frgmt.appendChild(t._prepare(seg, cxform));
-                        }
-                        node.appendChild(frgmt);
-                    }else{
-                        var node = t._createElement("use");
-                        t._setAttributes(node, {href: '#s' + id}, NS_XLINK);
-                        t._setStyle(node, obj.fill, obj.line, cxform);
+        _cast: function(character, cxform2){
+            var t = this,
+                objId = character.object || t._displayList[character.depth].character.object;
+            if(objId){
+                if(character.clipDepth){
+                    var cpNode = t._defs.appendChild(t._createElement("clipPath")),
+                        useNode = cpNode.appendChild(t._createElement("use")),
+                        attrs = {id: 'p' + objId},
+                        matrix = character.matrix;
+                    t._setAttributes(useNode, {href: '#s' + objId}, NS_XLINK);
+                    if(matrix){ attrs.transform = matrix2string(matrix); }
+                    t._setAttributes(useNode, attrs);
+                }
+                var cxform1 = character.cxform,
+                    cxform = cxform1 && cxform2 ? concatCxform(cxform1, cxform2) : cxform1 || cxform2,
+                    characterId = character._id = objectId({
+                        object: objId,
+                        cxform: cxform
+                    });
+                if(!t._set[characterId]){
+                    var obj = t._dictionary[objId].object,
+                        node = null,
+                        type = obj.type,
+                        t = this,
+                        attrs = {id: 'c' + characterId};
+                    switch(type){
+                        case "shape":
+                            var segments = obj.segments;
+                            if(segments){
+                                var node = t._createElement('g'),
+                                    frag = doc.createDocumentFragment();
+                                for(var i = 0, seg = segments[0]; seg; seg = segments[++i]){
+                                    var useNode = frag.appendChild(t._createElement("use"));
+                                    t._setAttributes(useNode, {href: '#s' + objId}, NS_XLINK);
+                                    t._setStyle(useNode, obj.fill, obj.line, cxform);
+                                }
+                                node.appendChild(frag);
+                            }else{
+                                var node = t._createElement("use");
+                                t._setAttributes(node, {href: '#s' + objId}, NS_XLINK);
+                                t._setStyle(node, obj.fill, obj.line, cxform);
+                            }
+                            break;
+                        case "button":
+                            var states1 = obj.states,
+                                states2 = character._states = {},
+                                btnCxform = obj.cxform;
+                            for(var state in states1){
+                                var list1 = states1[state],
+                                    list2 = states2[state] || (states2[state] = {});
+                                for(var depth in list1){
+                                    var stateCharacter = list2[depth] = cloneCharacter(list1[depth]);
+                                    t._cast(stateCharacter, cxform1 || btnCxform);
+                                }
+                            }
+                            break;
+                        case "text":
+                            var strings = obj.strings,
+                                numStrings = strings.length,
+                                frag = doc.createDocumentFragment(),
+                                matrix = cloneMatrix(obj.matrix);
+                            for(var i = 0; i < numStrings; i++){
+                                var useNode = frag.appendChild(t._createElement("use")),
+                                    id = objId + (numStrings > 1 ? '-' + (i + 1) : ''),
+                                    string = strings[i];
+                                t._setAttributes(useNode, {href: '#t' + id}, NS_XLINK);
+                                t._setStyle(useNode, string.fill, null, cxform);
+                            }
+                            if(strings.length > 1){
+                                var node = t._createElement('g');
+                                node.appendChild(frag);
+                            }else{ var node = frag.firstChild; }
+                            matrix.scaleY *= -1;
+                            attrs.transform = matrix2string(matrix);
+                            break;
                     }
-                    break;
-                case "button":
-                    var node = t._createElement('g'),
-                        frgmt = doc.createDocumentFragment(),
-                        states = obj.states,
-                        hitNode = null,
-                        stateNodes = {},
-                        currState = b.UP,
-                        m = Gordon.mouseButtons,
-                        isMouseOver = false,
-                        action = obj.action,
-                        trackAsMenu = obj.trackAsMenu;
-                    for(var state in states){
-                        var stateFrgmt = doc.createDocumentFragment(),
-                            list = states[state];
-                        for(var depth in list){
-                            var character = list[depth];
-                            stateFrgmt.appendChild(t._prepare(t._dictionary[character.object].object, obj.cxform));
-                        }
-                        if(stateFrgmt.length > 1){
-                            var stateNode = t._createElement('g');
-                            stateNode.appendChild(stateFrgmt);
-                        }else{ var stateNode = stateFrgmt.firstChild; }
-                        t._setAttributes(stateNode, {opacity: state == b.UP ? 1 : 0});
-                        if(state == b.HIT){ hitNode = stateNode; }
-                        else{ stateNodes[state] = frgmt.appendChild(stateNode); }
+                    if(node){
+                        t._setAttributes(node, attrs);
+                        t._defs.appendChild(node);
+                        t._set[characterId] = {
+                            character: character,
+                            node: node
+                        };
                     }
-                    node.appendChild(frgmt);
-                    node.appendChild(hitNode);
-                    
-                    function setState(state){
-                        t._setAttributes(stateNodes[currState], {opacity: 0});
-                        t._setAttributes(stateNodes[state], {opacity: 1});
-                        currState = state;
-                    };
-                    
-                    function mouseupHandle(e){
-                        if(!(buttonMask & m.LEFT)){
-                            if(isMouseOver){
-                                setState(b.OVER);
-                                if(action){ action(); }
-                            }else{ setState(b.UP); }
-                            doc.removeEventListener("mouseup", mouseupHandle, false);
-                            t.eventTarget = null;
-                        }
-                        return false;
-                    };
-                    
-                    hitNode.onmousemove = function(e){
-                        if(!t.eventTarget){
-                            if(buttonMask & m.LEFT){ this.onmousedown(e); }
-                            else{ setState(b.OVER); }
-                        }  
-                        if(!isMouseOver){
-                            var handle = doc.addEventListener("mousemove", function(){
-                                if(!t.eventTarget || trackAsMenu){ setState(b.UP); }
-                                doc.removeEventListener("mousemove", handle, true);
-                                isMouseOver = false;
-                            }, true);
-                        }
-                        isMouseOver = true;
-                        return false;
-                    };
-                    
-                    hitNode.onmousedown = function(e){
-                        if(buttonMask & m.LEFT){
-                            setState(b.DOWN);
-                            doc.addEventListener("mouseup", mouseupHandle, false);
-                            t.eventTarget = this;
-                        }
-                        return false;
-                    };
-                    
-                    hitNode.onmouseup = function(e){
-                        setState(b.OVER);
-                        return false;
-                    };
-                    break;
-                case "text":
-                    var strings = obj.strings,
-                        frgmt = doc.createDocumentFragment(),
-                        matrix = cloneMatrix(obj.matrix);
-                    for(var i = 0, string = strings[0]; string; string = strings[++i]){
-                        var useNode = frgmt.appendChild(t._createElement("use"));
-                        t._setAttributes(useNode, {href: '#t' + id + '-' + (i + 1)}, NS_XLINK);
-                        t._setStyle(useNode, string.fill, null, cxform);
-                    }
-                    if(strings.length > 1){
-                        var node = t._createElement('g');
-                        node.appendChild(frgmt);
-                    }else{ var node = frgmt.firstChild; }
-                    matrix.scaleY *= -1;
-                    attrs.transform = matrix2string(matrix);
-                    break;
+                }
             }
-            if(node){ t._setAttributes(node, attrs); }
-            return node;
+            return t;
         },
         
         _setStyle: function(node, fill, line, cxform){
@@ -471,7 +411,6 @@
             if(fill){
                 var type = fill.type;
                 if(fill.type){
-                    objectId(fill);
                     var fillNode = t._defs.appendChild(t._buildFill(fill, cxform));
                     attrs.fill = "url(#" + fillNode.id + ')';
                 }else{
@@ -485,7 +424,7 @@
                 var color = cxform ? transformColor(line.color, cxform) : line.color,
                     alpha = color.alpha;
                 attrs.stroke = color2string(color);
-                attrs["stroke-width"] = Math.max(line.width, 1);
+                attrs["stroke-width"] = max(line.width, 20);
                 if(undefined != alpha && alpha < 1){ attr["stroke-opacity"] = alpha; }
             }
             t._setAttributes(node, attrs);
@@ -495,7 +434,10 @@
         _buildFill: function(fill, cxform){
             var t = this,
                 f = t._fills,
-                id = objectId(fill),
+                id = objectId({
+                    fill: fill,
+                    cxform: cxform
+                }),
                 node = f[id];
             if(!node){
                 var type = fill.type,
@@ -527,57 +469,58 @@
                         if(fill.interpolation == i.LINEAR_RGB){ attrs["color-interpolation"] = "linearRGB"; }
                         stops.forEach(function(stop){
                             var stopNode = node.appendChild(t._createElement("stop")),
-                                color = cxform ? transformColor(stop.color, cxform) : stop.color,
-                                alpha = color.alpha;
+                                color = cxform ? transformColor(stop.color, cxform) : stop.color;
                             t._setAttributes(stopNode, {
                                 offset: stop.offset,
                                 "stop-color": color2string(color),
-                                "stop-opacity": alpha == undefined ? 1 : alpha / 255
+                                "stop-opacity": "alpha" in color ? 1 : color.alpha
                             });
                         });
                         break;
                     case "pattern":
-                        var node = t._createElement("pattern");
+                        var node = t._createElement("pattern"),
+                            fillImg = fill.image,
+                            width = fillImg.width,
+                            height = fillImg.height;
                         if(cxform){
-                            var canvas = doc.createElement("canvas"),
-                                img = doc.getElementById('i' + obj.image.id),
-                                width = img.width,
-                                height = img.height,
-                                ctx = canvas.getContext("2d");
+                            var img = new Image(),
+                                origin = doc.getElementById('i' + fillImg.id),
+                                canvas = doc.createElement("canvas"),
+                                ctx = canvas.getContext("2d"),
+                                imgNode = node.appendChild(t._createElement("image"));
+                            img.src = origin.getAttribute("href");
                             canvas.width = width;
                             canvas.height = height;
                             ctx.drawImage(img, 0, 0);
                             var imgData = ctx.getImageData(0, 0, width, height),
                                 pxData = imgData.data,
+                                len = pxData.length,
                                 multR = cxform.multR,
                                 multG = cxform.multG,
                                 multB = cxform.multB,
-                                multA = cxform.multA,
                                 addR = cxform.addR,
                                 addG = cxform.addG,
-                                addB = cxform.addB,
-                                addA = cxform.addA;
-                            for(var i = 0; undefined != pxData[i]; i+= 4){
-                                pxData[i] = ~~Math.max(0, Math.min((pxData[i] * multR) + addR, 255));
-                                pxData[i + 1] = ~~Math.max(0, Math.min((pxData[i + 1] * multG) + addG, 255));
-                                pxData[i + 2] = ~~Math.max(0, Math.min((pxData[i + 2] * multB) + addB, 255));
-                                pxData[i + 3] = ~~Math.max(0, Math.min((pxData[i + 3] * multA) + addA, 255));
+                                addB = cxform.addB;
+                            for(var i = 0; i < len; i+= 4){
+                                pxData[i] = ~~max(0, min((pxData[i] * multR) + addR, 255));
+                                pxData[i + 1] = ~~max(0, min((pxData[i + 1] * multG) + addG, 255));
+                                pxData[i + 2] = ~~max(0, min((pxData[i + 2] * multB) + addB, 255));
                             }
-                            var imgNode = node.appendChild(t._createElement("image"));
+                            ctx.putImageData(imgData, 0, 0);
                             t._setAttributes(imgNode, {href: canvas.toDataURL()}, NS_XLINK);
                             t._setAttributes(imgNode, {
                                 width: width,
-                                height: height
+                                height: height,
+                                opacity: ~~max(0, min(cxform.multA + cxform.addA, 1))
                             });
                         }else{
-                            var useNode = node.appendChild(t._createElement("use")),
-                                img = fill.image;
-                            t._setAttributes(useNode, {href: "#i" + img.id}, NS_XLINK);
+                            var useNode = node.appendChild(t._createElement("use"));
+                            t._setAttributes(useNode, {href: "#i" + fillImg.id}, NS_XLINK);
                         }
                         attrs.patternUnits = "userSpaceOnUse";
                         attrs.patternTransform = matrix2string(fill.matrix);
-                        attrs.width = img.width;
-                        attrs.height = img.height;
+                        attrs.width = width;
+                        attrs.height = height;
                         break;
                 }
                 t._setAttributes(node, attrs);
@@ -603,14 +546,20 @@
                 t = this,
                 d = t._displayList,
                 replace = d[depth];
-            if(replace && !character.object){ var node = replace.node; }
-            else{
+            if(replace && !character.object){
+                var id = character._id,
+                    node = replace.node,
+                    matrix = character.matrix;
+                if(id != replace.character._id){ t._setAttributes(node, {href: "#c" + id}, NS_XLINK); }
+                var matrix = character.matrix;
+                if(matrix && matrix != replace.matrix){ t._setAttributes(node, {transform: matrix2string(matrix)}); }
+            }else{
                 if(character.clipDepth){
                     var node = t._createElement('g');
                     t._setAttributes(node, {"clip-path": "url(#p" + character.object + ')'});
-                }else{ var node = t._createElement("use"); }
-                var stage = t._stage;
+                }else{ var node = t._prepare(character); }
                 if(replace){ t.remove(depth); }
+                var stage = t._stage;
                 if(1 == depth){ stage.insertBefore(node, stage.firstChild); }
                 else{
                     var nextDepth = 0;
@@ -626,18 +575,99 @@
                     else{ stage.appendChild(node); }
                 }
             }
-            if(!character.clipDepth){
-                var attrs = {},
-                    matrix = character.matrix;
-                if(matrix){ attrs.transform = matrix2string(matrix); }
-                t._setAttributes(node, {href: "#c" + character._id}, NS_XLINK);
-                t._setAttributes(node, attrs);
-            }
             d[depth] = {
                 character: character,
                 node: node
             };
             return t;
+        },
+        
+        _prepare: function(character){
+            var t = this,
+                obj = t._dictionary[character.object].object,
+                type = obj.type,
+                node = null,
+                matrix = character.matrix;
+            switch(type){
+                case "button":
+                    var node = t._createElement('g'),
+                        states = character._states,
+                        btnCxform = obj.cxform,
+                        hitNode = null,
+                        stateNodes = {},
+                        frag = doc.createDocumentFragment(),
+                        style = doc.body.style,
+                        currState = b.UP,
+                        m = Gordon.mouseButtons,
+                        isMouseOver = false,
+                        action = obj.action,
+                        trackAsMenu = obj.trackAsMenu;
+                    for(var state in states){
+                        var stateFrag = doc.createDocumentFragment(),
+                            list = states[state];
+                        for(var depth in list){ stateFrag.appendChild(t._prepare(list[depth])); }
+                        if(stateFrag.length > 1){
+                            var stateNode = t._createElement('g');
+                            stateNode.appendChild(stateFrag);
+                        }else{ var stateNode = stateFrag.firstChild; }
+                        t._setAttributes(stateNode, {opacity: state == b.UP ? 1 : 0});
+                        if(state == b.HIT){ hitNode = stateNode; }
+                        else{ stateNodes[state] = frag.appendChild(stateNode); }
+                    }
+                    node.appendChild(frag);
+                    node.appendChild(hitNode);
+                    
+                    function setState(state){
+                        if(state == b.UP){ style.cursor = setState._cursor || "default"; }
+                        else{
+                            setState._cursor = style.cursor;
+                            style.cursor = "pointer";
+                        }
+                        t._setAttributes(stateNodes[currState], {opacity: 0});
+                        t._setAttributes(stateNodes[state], {opacity: 1});
+                        currState = state;
+                    };
+                    
+                    hitNode.onmouseover = function(){
+                        if(!(buttonMask & m.LEFT)){ setState(b.OVER); }
+                        else if(t.eventTarget == this){ setState(b.DOWN); }
+                        return false;
+                    }
+                    
+                    hitNode.onmousedown = function(){
+                        setState(b.DOWN);
+                        t.eventTarget = this;
+                        var handle = doc.addEventListener("mouseup", function(){
+                            setState(b.UP);
+                            doc.removeEventListener("mouseup", handle, true);
+                        }, true);
+                        return false;
+                    }
+                    
+                    hitNode.onmouseup = function(){
+                        if(t.eventTarget == this){
+                            if(action){ action(); }
+                            t.eventTarget = null;
+                        }
+                        setState(b.OVER);
+                        return false;
+                    }
+                    
+                    hitNode.onmouseout = function(){
+                        if(t.eventTarget == this && !trackAsMenu){ setState(b.OVER); }
+                        else{
+                            setState(b.UP);
+                            t.eventTarget = null;
+                        }
+                        return false;
+                    }
+                    break;
+                default:
+                    var node = t._createElement("use");
+                    t._setAttributes(node, {href: "#c" + character._id}, NS_XLINK);
+            }
+            if(matrix){ t._setAttributes(node, {transform: matrix2string(matrix)}); }
+            return node;
         },
         
         remove: function(depth){
@@ -672,10 +702,45 @@
     
     function transformColor(color, cxform){
         return {
-            red: ~~Math.max(0, Math.min((color.red * cxform.multR) + cxform.addR, 255)),
-            green: ~~Math.max(0, Math.min((color.green * cxform.multG) + cxform.addG, 255)),
-            blue: ~~Math.max(0, Math.min((color.blue * cxform.multB) + cxform.addB, 255)),
-            alpha: ~~Math.max(0, Math.min((color.alpha * cxform.multA) + cxform.addA, 255))
+            red: ~~max(0, min((color.red * cxform.multR) + cxform.addR, 255)),
+            green: ~~max(0, min((color.green * cxform.multG) + cxform.addG, 255)),
+            blue: ~~max(0, min((color.blue * cxform.multB) + cxform.addB, 255)),
+            alpha: ~~max(0, min((color.alpha * cxform.multA) + cxform.addA, 255))
+        }
+    }
+    
+    function objectId(object){
+        var memo = objectId._memo || (objectId._memo = {}),
+            nextId = (objectId._nextId || (objectId._nextId = 1)),
+            key = object2key(object),
+            origId = memo[key];
+        if(!origId){ memo[key] = nextId; }
+        return origId || objectId._nextId++;
+    }
+    
+    function object2key(object){
+        var a = 1,
+            b = 0;
+        for(var prop in object){
+            var val = object[prop];
+            if("object" == typeof val){ a += object2key(val); }
+            else{
+                var buff = '' + val;
+                for(var j = 0; buff[j]; j++){
+                    a = (a + buff.charCodeAt(j)) % 65521;
+                    b = (b + a) % 65521;
+                }
+            }
+        }
+        return (b << 16) | a;
+    }
+    
+    function concatCxform(cxform1, cxform2){
+        return{
+            multR: cxform1.multR * cxform2.multR, multG: cxform1.multG * cxform2.multG,
+            multB: cxform1.multB * cxform2.multB, multA: cxform1.multA * cxform2.multA,
+            addR: cxform1.addR + cxform2.addR, addG: cxform1.addG + cxform2.addG,
+            addB: cxform1.addB + cxform2.addB, addA: cxform1.addA + cxform2.addA
         }
     }
     
@@ -686,33 +751,6 @@
             matrix: character.matrix,
             cxform: character.cxform
         };
-    }
-    
-    function objectId(object){
-        var callee = arguments.callee,
-            memo = callee._memo || (callee._memo = {}),
-            nextId = (callee._nextId || (callee._nextId = 1)),
-            key = object2key(object),
-            origId = memo[key];
-        if(!origId){ memo[key] = nextId; }
-        return origId || callee._nextId++;
-    }
-    
-    function object2key(object){
-        var a = 1,
-            b = 0;
-        for(var prop in object){
-            var val = object[prop];
-            if("object" == typeof val){ a = arguments.callee(val); }
-            else{
-                var buff = '' + val;
-                for(var j = 0; buff[j]; j++){
-                    a = (a + buff.charCodeAt(j)) % 65521;
-                    b = (b + a) % 65521;
-                }
-            }
-        }
-        return (b << 16) | a;
     }
     
     function cloneMatrix(matrix){

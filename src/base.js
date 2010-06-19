@@ -1,6 +1,9 @@
 var win = window,
     doc = win.document,
+    fromCharCode = String.fromCharCode,
     push = Array.prototype.push,
+    min = Math.min,
+    max = Math.max;
 
 Gordon = {
     debug: false,
