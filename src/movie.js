@@ -19,7 +19,7 @@
         var t = this,
             s = Gordon.readyStates;
         t.url = url;
-        for(var prop in defaults){ t[prop] = undefined != options[prop] ? options[prop] : defaults[prop]; }
+        for(var prop in defaults){ t[prop] = prop in options ? options[prop] : defaults[prop]; }
         if(!url){ throw new Error("URL of a SWF movie file must be passed as first argument"); }
         t._startTime = +new Date;
         t.framesLoaded = 0;
@@ -38,15 +38,13 @@
                 case "header":
                     for(var prop in obj){ t['_' + prop] = obj[prop]; }
                     var f = t._frameSize,
-                        frmWidth = f.right - f.left,
-                        frmHeight = f.bottom - f.top,
                         r = t.renderer = t.renderer || Gordon.SvgRenderer,
                         id = t.id;
                     if(!(t.width && t.height)){
-                        t.width = frmWidth / 20;
-                        t.height = frmHeight / 20;
+                        t.width = (f.right - f.left) / 20;
+                        t.height = (f.bottom - f.top) / 20;
                     };
-                    t._renderer = new r(t.width, t.height, frmWidth, frmHeight, t.quality, t.scale, t.bgcolor);
+                    t._renderer = new r(t.width, t.height, f, t.quality, t.scale, t.bgcolor);
                     t.totalFrames = t._frameCount;
                     if(id){
                         var stage = t._stage = doc.getElementById(id),
@@ -176,13 +174,13 @@
         },
         
         toggleQuality: function thq(){
-            var o = thq._orig,
+            var o = thq._quality,
                 t = this,
                 q = t.quality;
             if(o){
                 q = t.quality = o;
-                thq._orig = null;
-            }else{ t.quality = thq._orig = q; }
+                thq._quality = null;
+            }else{ t.quality = thq._quality = q; }
             t._renderer.setQuality(q);
             return t;
         },
