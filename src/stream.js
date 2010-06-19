@@ -383,7 +383,6 @@
                         var distTable = buildHuffTable(litLengths.splice(numLitLengths, numDistLengths)),
                             litTable = buildHuffTable(litLengths);
                     }
-                    console.log(distTable, litTable);
                     do{
                         var sym = decodeSymbol(t, litTable);
                         if(sym < 256){ buff.push(raw ? sym : fromCharCode(sym)); }

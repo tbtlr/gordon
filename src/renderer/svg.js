@@ -716,20 +716,20 @@
         }
     }
     
-    function objectId(object){
+    function objectId(obj){
         var memo = objectId._memo || (objectId._memo = {}),
             nextId = (objectId._nextId || (objectId._nextId = 1)),
-            key = object2key(object),
+            key = object2key(obj),
             origId = memo[key];
         if(!origId){ memo[key] = nextId; }
         return origId || objectId._nextId++;
     }
     
-    function object2key(object){
+    function object2key(obj){
         var a = 1,
             b = 0;
-        for(var prop in object){
-            var val = object[prop];
+        for(var prop in obj){
+            var val = obj[prop];
             if("object" == typeof val){ a += object2key(val); }
             else{
                 var buff = '' + val;
