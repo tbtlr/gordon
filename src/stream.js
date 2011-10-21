@@ -10,7 +10,7 @@
             [5, 65], [5, 97], [6, 129], [6, 193], [7, 257], [7, 385], [8, 513], [8, 769], [9, 1025], [9, 1537],
             [10, 2049], [10, 3073], [11, 4097], [11, 6145], [12, 8193], [12, 12289], [13, 16385], [13, 24577]
         ];
-    
+
     Gordon.Stream = function(data){
         var buff = [],
             t = this,
@@ -25,7 +25,7 @@
         readByteAt: function(pos){
             return this._buffer.charCodeAt(pos);
         },
-        
+
         readNumber: function(numBytes, bigEnd){
             var t = this,
                 val = 0;
@@ -40,58 +40,58 @@
             t.align();
             return val;
         },
-        
+
         readSNumber: function(numBytes, bigEnd){
             var val = this.readNumber(numBytes, bigEnd),
                 numBits = numBytes * 8;
             if(val >> (numBits - 1)){ val -= Math.pow(2, numBits); }
             return val;
         },
-        
+
         readSI8: function(){
             return this.readSNumber(1);
         },
-        
+
         readSI16: function(bigEnd){
             return this.readSNumber(2, bigEnd);
         },
-        
+
         readSI32: function(bigEnd){
             return this.readSNumber(4, bigEnd);
         },
-        
+
         readUI8: function(){
             return this.readNumber(1);
         },
-        
+
         readUI16: function(bigEnd){
             return this.readNumber(2, bigEnd);
         },
-        
+
         readUI24: function(bigEnd){
             return this.readNumber(3, bigEnd);
         },
-        
+
         readUI32: function(bigEnd){
             return this.readNumber(4, bigEnd);
         },
-        
+
         readFixed: function(){
             return this._readFixedPoint(32, 16);
         },
-        
+
         _readFixedPoint: function(numBits, precision){
             return this.readSB(numBits) * Math.pow(2, -precision);
         },
-        
+
         readFixed8: function(){
             return this._readFixedPoint(16, 8);
         },
-        
+
         readFloat: function(){
             return this._readFloatingPoint(8, 23);
         },
-        
+
         _readFloatingPoint: function(numEBits, numSBits){
             var numBits = 1 + numEBits + numSBits,
                 numBytes = numBits / 8,
@@ -136,15 +136,15 @@
             }
             return val;
         },
-        
+
         readFloat16: function(){
             return this._readFloatingPoint(5, 10);
         },
-        
+
         readDouble: function(){
             return this._readFloatingPoint(11, 52);
         },
-        
+
         readEncodedU32: function(){
             var val = 0;
             for(var i = 0; i < 5; i++){
@@ -154,13 +154,13 @@
             }
             return val;
         },
-        
+
         readSB: function(numBits){
             var val = this.readUB(numBits);
             if(val >> (numBits - 1)){ val -= Math.pow(2, numBits); }
             return val;
         },
-        
+
         readUB: function(numBits, lsb){
             var t = this,
                 val = 0;
@@ -174,11 +174,11 @@
             }
             return val;
         },
-        
+
         readFB: function(numBits){
             return this._readFixedPoint(numBits, 16);
         },
-        
+
         readString: function(numChars){
             var t = this,
                 b = t._buffer;
@@ -197,28 +197,28 @@
             }
             return str;
         },
-        
+
         readBool: function(numBits){
             return !!this.readUB(numBits || 1);
         },
-        
+
         seek: function(offset, absolute){
             var t = this;
             t.offset = (absolute ? 0 : t.offset) + offset;
             t.align();
             return t;
         },
-        
+
         align: function(){
             this._bitBuffer = null;
             this._bitOffset = 8;
             return this;
         },
-        
+
         readLanguageCode: function(){
             return this.readUI8();
         },
-        
+
         readRGB: function(){
             return {
                 red: this.readUI8(),
@@ -226,20 +226,20 @@
                 blue: this.readUI8()
             }
         },
-        
+
         readRGBA: function(){
             var rgba = this.readRGB();
             rgba.alpha = this.readUI8() / 255;
             return rgba;
         },
-        
+
         readARGB: function(){
             var alpha = this.readUI8() / 255,
                 rgba = this.readRGB();
             rgba.alpha = alpha;
             return rgba;
         },
-        
+
         readRect: function(){
             var t = this;
                 numBits = t.readUB(5),
@@ -252,7 +252,7 @@
             t.align();
             return rect;
         },
-        
+
         readMatrix: function(){
             var t = this,
                 hasScale = t.readBool();
@@ -276,15 +276,15 @@
             t.align();
             return matrix;
         },
-        
+
         readCxform: function(){
             return this._readCxf();
         },
-        
+
         readCxformA: function(){
             return this._readCxf(true);
         },
-        
+
         _readCxf: function(withAlpha){
             var t = this;
                 hasAddTerms = t.readBool(),
@@ -309,7 +309,7 @@
             t.align();
             return cxform;
         },
-        
+
         decompress: function(){
             var t = this,
                 b = t._buffer,
@@ -320,7 +320,7 @@
             t._buffer = data;
             return t;
         },
-        
+
         unzip: function uz(raw){
             var t = this,
                 buff = [],
@@ -407,7 +407,7 @@
             return raw ? buff : buff.join('');
         }
     };
-    
+
     function buildHuffTable(bitLengths){
         var numLengths = bitLengths.length,
             blCount = [],
@@ -438,7 +438,7 @@
         }
         return table;
     }
-    
+
     function decodeSymbol(s, table) {
         var code = 0,
             len = 0;
