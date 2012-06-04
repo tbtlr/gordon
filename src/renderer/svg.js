@@ -6,7 +6,7 @@
         buttonStates = {},
         buttonMask = 0;
     for(var state in b){ buttonStates[b[state]] = state.toLowerCase(); }
-    
+
     Gordon.SvgRenderer = function(width, height, frmSize, quality, scale, bgcolor){
         var t = this,
             n = t.node = t._createElement("svg"),
@@ -45,7 +45,7 @@
         _createElement: function(name){
             return doc.createElementNS(NS_SVG, name);
         },
-        
+
         _setAttributes: function(node, attrs, ns){
             if(node){
                 for(var name in attrs){
@@ -55,7 +55,7 @@
             }
             return node;
         },
-        
+
         setQuality: function(quality){
             var q = Gordon.qualityValues,
                 t = this;
@@ -106,7 +106,7 @@
             t.quality = quality;
             return t;
         },
-        
+
         setBgcolor: function(rgb){
             var t = this;
             if(!t.bgcolor){
@@ -115,7 +115,7 @@
             }
             return t;
         },
-        
+
         define: function(obj){
             var t = this,
                 d = t._dictionary,
@@ -299,7 +299,7 @@
             }else{ d[id].object = obj; }
             return t;
         },
-        
+
         frame: function(frm){
             var bgcolor = frm.bgcolor,
                 t = this,
@@ -315,7 +315,7 @@
             t._timeline.push(frm);
             return t;
         },
-        
+
         _cast: function(character, cxform2){
             var t = this,
                 objId = character.object || t._displayList[character.depth].character.object;
@@ -404,7 +404,7 @@
             }
             return t;
         },
-        
+
         _setStyle: function(node, fill, line, cxform){
             var t = this,
                 attrs = {};
@@ -430,7 +430,7 @@
             t._setAttributes(node, attrs);
             return t;
         },
-        
+
         _buildFill: function(fill, cxform){
             var t = this,
                 f = t._fills,
@@ -451,7 +451,7 @@
                             stops = fill.stops;
                         attrs.gradientUnits = "userSpaceOnUse";
                         attrs.gradientTransform = matrix2string(fill.matrix);
-                        if("linear" == type){ 
+                        if("linear" == type){
                             attrs.x1 = -819.2;
                             attrs.x2 = 819.2;
                         }else{
@@ -528,7 +528,7 @@
             }
             return node;
         },
-        
+
         show: function(frmIdx){
             var t = this,
                 frm = t._timeline[frmIdx],
@@ -540,7 +540,7 @@
             }
             return t;
         },
-        
+
         place: function(character){
             var depth = character.depth,
                 t = this,
@@ -581,7 +581,7 @@
             };
             return t;
         },
-        
+
         _prepare: function(character){
             var t = this,
                 obj = t._dictionary[character.object].object,
@@ -620,7 +620,7 @@
                     }
                     node.appendChild(frag);
                     node.appendChild(hitNode);
-                    
+
                     function setState(state){
                         if(state == b.UP){ style.cursor = setState._cursor || "default"; }
                         else{
@@ -631,13 +631,13 @@
                         t._setAttributes(stateNodes[state], {visibility: "visible"});
                         currState = state;
                     };
-                    
+
                     hitNode.onmouseover = function(){
                         if(!(buttonMask & m.LEFT)){ setState(b.OVER); }
                         else if(this == t.eventTarget){ setState(b.DOWN); }
                         return false;
                     }
-                    
+
                     hitNode.onmousedown = function(){
                         t.eventTarget = this;
                         setState(b.DOWN);
@@ -648,7 +648,7 @@
                         }, true);
                         return false;
                     }
-                    
+
                     hitNode.onmouseup = function(){
                         setState(b.OVER);
                         if(this == t.eventTarget){
@@ -657,7 +657,7 @@
                         }
                         return false;
                     }
-                    
+
                     hitNode.onmouseout = function(){
                         if(this == t.eventTarget){
                             if(trackAsMenu){
@@ -676,7 +676,7 @@
             if(matrix){ t._setAttributes(node, {transform: matrix2string(matrix)}); }
             return node;
         },
-        
+
         remove: function(depth){
             var d = this._displayList,
                 item = d[depth],
@@ -691,14 +691,14 @@
             return this;
         }
     };
-    
+
     var REGEXP_IS_COLOR = /^([\da-f]{1,2}){3}$/i;
-    
+
     function color2string(color){
         if("string" == typeof color){ return REGEXP_IS_COLOR.test(color) ? color : null; }
         return "rgb(" + [color.red, color.green, color.blue] + ')';
     }
-    
+
     function matrix2string(matrix){
         return "matrix(" + [
             matrix.scaleX, matrix.skewX,
@@ -706,7 +706,7 @@
             matrix.moveX, matrix.moveY
         ] + ')';
     }
-    
+
     function transformColor(color, cxform){
         return {
             red: ~~max(0, min((color.red * cxform.multR) + cxform.addR, 255)),
@@ -715,7 +715,7 @@
             alpha: ~~max(0, min((color.alpha * cxform.multA) + cxform.addA, 255))
         }
     }
-    
+
     function objectId(obj){
         var memo = objectId._memo || (objectId._memo = {}),
             nextId = (objectId._nextId || (objectId._nextId = 1)),
@@ -724,7 +724,7 @@
         if(!origId){ memo[key] = nextId; }
         return origId || objectId._nextId++;
     }
-    
+
     function object2key(obj){
         var a = 1,
             b = 0;
@@ -741,7 +741,7 @@
         }
         return (b << 16) | a;
     }
-    
+
     function concatCxform(cxform1, cxform2){
         return{
             multR: cxform1.multR * cxform2.multR, multG: cxform1.multG * cxform2.multG,
@@ -750,7 +750,7 @@
             addB: cxform1.addB + cxform2.addB, addA: cxform1.addA + cxform2.addA
         }
     }
-    
+
     function cloneCharacter(character){
         return {
             object: character.object,
@@ -759,7 +759,7 @@
             cxform: character.cxform
         };
     }
-    
+
     function cloneMatrix(matrix){
         return {
             scaleX: matrix.scaleX, scaleY: matrix.scaleY,
@@ -767,7 +767,7 @@
             moveX: matrix.moveX, moveY: matrix.moveY
         };
     }
-    
+
     if(doc){
         doc.addEventListener("mousedown", function(e){
             buttonMask |= 0x01 << e.button;

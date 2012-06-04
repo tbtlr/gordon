@@ -12,17 +12,17 @@
             }
         }
         worker = new Worker(src);
-        
+
         Gordon.Parser = function(data, ondata){
             var t = this,
                 w = t._worker = worker;
             t.data = data;
             t.ondata = ondata;
-            
+
             w.onmessage = function(e){
                 t.ondata(e.data);
             };
-            
+
             w.postMessage(data);
         };
     }else{
@@ -80,7 +80,7 @@
             ondata: function(data){
                 postMessage(data);
             },
-            
+
             _handleDefineShape: function(s, offset, len, frm, withAlpha){
                 var id = s.readUI16(),
                     shape = {
@@ -110,7 +110,7 @@
                 t._dictionary[id] = shape;
                 return t;
             },
-            
+
             _readEdges: function(s, fillStyles, lineStyles, withAlpha, morph){
                 var numFillBits = s.readUB(4),
                     numLineBits = s.readUB(4),
@@ -317,7 +317,7 @@
                     else{ return segments[0]; }
                 }
             },
-            
+
             _readFillStyles: function(s, withAlpha, morph){
                 var numStyles = s.readUI8(),
                     styles = [];
@@ -371,7 +371,7 @@
                 }
                 return styles;
             },
-            
+
             _readLineStyles: function(s, withAlpha, morph){
                 var numStyles = s.readUI8(),
                     styles = [];
@@ -386,7 +386,7 @@
                 }
                 return styles;
             },
-            
+
             _handlePlaceObject: function(s, offset, len, frm){
                 var objId = s.readUI16(),
                     depth = s.readUI16(),
@@ -400,14 +400,14 @@
                 frm.displayList[depth] = character;
                 return t;
             },
-            
+
             _handleRemoveObject: function(s, offset, len, frm){
                 var id = s.readUI16(),
                     depth = s.readUI16();
                 frm.displayList[depth] = null;
                 return this;
             },
-            
+
             _handleDefineBits: function(s, offset, len, frm, withAlpha){
                 var id = s.readUI16(),
                     img = {
@@ -443,7 +443,7 @@
                 t._dictionary[id] = img;
                 return t;
             },
-            
+
             _handleDefineButton: function(s, offset, len, frm, advanced){
                 var id = s.readUI16(),
                     t = this,
@@ -482,22 +482,22 @@
                 d[id] = button;
                 return t;
             },
-            
+
             _readAction: function(s, offset, len){
                 s.seek(len - (s.offset - offset));
                 return '';
             },
-            
+
             _handleJpegTables: function(s, offset, len){
                 this._jpegTables = s.readString(len);
                 return this;
             },
-            
+
             _handleSetBackgroundColor: function(s, offset, len, frm){
                 frm.bgcolor = s.readRGB();
                 return this;
             },
-            
+
             _handleDefineFont: function(s){
                 var id = s.readUI16(),
                     numGlyphs = s.readUI16() / 2,
@@ -514,7 +514,7 @@
                 t._dictionary[id] = font;
                 return t;
             },
-            
+
             _readGlyph: function(s){
                 var numFillBits = s.readUB(4),
                     numLineBits = s.readUB(4),
@@ -567,7 +567,7 @@
                 s.align();
                 return {commands: cmds.join('')};
             },
-            
+
             _handleDefineText: function(s, offset, length, frm, withAlpha){
                 var id = s.readUI16(),
                     strings = [],
@@ -630,12 +630,12 @@
                 d[id] = txt;
                 return this;
             },
-            
+
             _handleDoAction: function(s, offset, len, frm){
                 frm.action = this._readAction(s, offset, len);
                 return this;
             },
-            
+
             _handleDefineFontInfo: function(s, offset, len){
                 var d = this._dictionary,
                     fontId = s.readUI16(),
@@ -657,7 +657,7 @@
                 d[fontId] = font;
                 return this;
             },
-            
+
             _handleDefineBitsLossless: function(s, offset, len, frm, withAlpha){
                 var id = s.readUI16(),
                     format = s.readUI8(),
@@ -674,15 +674,15 @@
                 this._dictionary[id] = img;
                 return this;
             },
-            
+
             _handleDefineBitsJpeg2: function(s, offset, len){
                 return this._handleDefineBits(s, offset, len);
             },
-            
+
             _handleDefineShape2: function(s, offset, len){
                 return this._handleDefineShape(s, offset, len);
             },
-            
+
             _handleDefineButtonCxform: function(s){
                 var t = this,
                     d = t._dictionary,
@@ -693,12 +693,12 @@
                 d[buttonId] = button;
                 return t;
             },
-            
+
             _handleProtect: function(s, offset, len){
                 s.seek(len);
                 return this;
             },
-            
+
             _handlePlaceObject2: function(s, offset, len, frm){
                 var flags = s.readUI8(),
                     depth = s.readUI16(),
@@ -718,33 +718,33 @@
                 frm.displayList[depth] = character;
                 return t;
             },
-            
+
             _handleRemoveObject2: function(s, offset, len, frm){
                 var depth = s.readUI16();
                 frm.displayList[depth] = null;
                 return this;
             },
-            
+
             _handleDefineShape3: function(s, offset, len, frm){
                 return this._handleDefineShape(s, offset, len, frm, true);
             },
-            
+
             _handleDefineText2: function(s, offset, len, frm){
                 return this._handleDefineText(s, offset, len, frm, true);
             },
-            
+
             _handleDefineButton2: function(s, offset, len, frm){
                 return t._handleDefineButton(s, offset, len, frm, true);
             },
-            
+
             _handleDefineBitsJpeg3: function(s, offset, len, frm){
                 return this._handleDefineBits(s, offset, len, frm, true);
             },
-            
+
             _handleDefineBitsLossless2: function(s, offset, len, frm){
                 return this._handleDefineBitsLossless(s, offset, len, frm, true);
             },
-            
+
             _handleDefineSprite: function(s, offset, len){
                 var id = s.readUI16(),
                     frameCount = s.readUI16(),
@@ -783,12 +783,12 @@
                 t._dictionary[id] = sprite;
                 return t;
             },
-            
+
             _handleFrameLabel: function(s, offset, len, frm){
                 frm.label = s.readString();
                 return this;
             },
-            
+
             _handleDefineMorphShape: function(s, offset, len){
                 var id = s.readUI16(),
                     startBounds = s.readRect(),
@@ -807,7 +807,7 @@
                 t._dictionary[id] = morph;
                 return t;
             },
-            
+
             _handleDefineFont2: function(s, offset, len){
                 var id = s.readUI16(),
                     hasLayout = s.readBool(),
@@ -866,7 +866,7 @@
                 return this;
             }
         };
-        
+
         function nlizeMatrix(matrix){
             return {
                 scaleX: matrix.scaleX * 20, scaleY: matrix.scaleY * 20,
@@ -874,7 +874,7 @@
                 moveX: matrix.moveX, moveY: matrix.moveY
             };
         }
-        
+
         function cloneEdge(edge){
             return {
                 i: edge.i,
@@ -884,7 +884,7 @@
                 x2: edge.x2, y2: edge.y2
             };
         }
-        
+
         function edges2cmds(edges, stroke){
             var firstEdge = edges[0],
                 x1 = 0,
@@ -907,11 +907,11 @@
             if(!stroke && (x2 != firstEdge.x1 || y2 != firstEdge.y1)){ cmds.push('L' + firstEdge.x1 + ',' + firstEdge.y1) }
             return cmds.join('');
         }
-        
+
         function pt2key(x, y){
             return (x + 50000) * 100000 + y;
         }
-        
+
         win.onmessage = function(e){
             new Gordon.Parser(e.data);
         };

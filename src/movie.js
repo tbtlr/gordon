@@ -14,7 +14,7 @@
             onprogress: function(percent){},
             onreadystatechange: function(state){}
         };
-        
+
     Gordon.Movie = function(url, options){
         var t = this,
             s = Gordon.readyStates;
@@ -88,7 +88,7 @@
             this.onreadystatechange(state);
             return this;
         },
-        
+
         play: function(){
             var t = this,
                 c = t.currentFrame,
@@ -106,14 +106,14 @@
             }, timeout);
             return t;
         },
-        
+
         next: function(){
             var t = this,
                 c = t.currentFrame;
             t.goTo(c < t.totalFrames ? c + 1 : 1);
             return t;
         },
-        
+
         goTo: function gf(frmNumOrLabel){
             var t = this,
                 c = t.currentFrame,
@@ -137,24 +137,24 @@
             }
             return t;
         },
-        
+
         stop: function(){
             this.isPlaying = false;
             return this;
         },
-        
+
         prev: function(){
             var t = this,
                 c = t.currentFrame;
             t.goTo(c > 1 ? c - 1 : t.totalFrames);
             return t;
         },
-        
+
         rewind: function(){
             this.goTo(1);
             return this;
         },
-        
+
         getURL: function(url, target){
             var u = Gordon.urlTargets;
             switch(target){
@@ -172,7 +172,7 @@
             }
             return this;
         },
-        
+
         toggleQuality: function thq(){
             var o = thq._quality,
                 t = this,
@@ -184,7 +184,7 @@
             t._renderer.setQuality(q);
             return t;
         },
-        
+
         getTime: function(){
             return this._startTime;
         }
