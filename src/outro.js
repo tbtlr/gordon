@@ -1,2 +1,0 @@
-    win.Gordon = Gordon;
-})(self);
